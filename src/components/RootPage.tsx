@@ -3,8 +3,7 @@ import { getTransactions, updateTransaction, deleteTransaction } from '../lib/ap
 import type { Transaction } from '../utils/currencyUtils'
 import RootTransactionTable from './root_component/RootTransactionTable'
 import TransactionForm from './system_component/TransactionForm'
-import ReceiptConfigModal, { type ReceiptConfig } from './system_component/ReceiptConfigModal'
-import Receipt from './system_component/Receipt'
+// Imports removed
 import Toast from './system_component/Toast'
 import { calculateExchangeTotal } from '../utils/currencyUtils'
 import ClientTimeAnalytics from './root_component/ClientTimeAnalytics'
@@ -14,8 +13,6 @@ export default function RootPage() {
     const [loading, setLoading] = useState(true)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
     const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null) // Default to All (within range)
-    const [dateFrom, setDateFrom] = useState('')
-    const [dateTo, setDateTo] = useState('')
 
     // Toast state
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -114,13 +111,7 @@ export default function RootPage() {
             return transactionDate === selectedDateFilter
         }
 
-        if (dateFrom && dateTo) {
-            const transactionDate = new Date(transaction.created_at)
-            const fromDate = new Date(dateFrom)
-            const toDate = new Date(dateTo)
-            toDate.setHours(23, 59, 59, 999)
-            return transactionDate >= fromDate && transactionDate <= toDate
-        }
+
 
         return true
     })
@@ -154,10 +145,6 @@ export default function RootPage() {
                     selectedDateFilter={selectedDateFilter}
                     setSelectedDateFilter={setSelectedDateFilter}
                     availableDates={availableDates} // 10 Days
-                    dateFrom={dateFrom}
-                    setDateFrom={setDateFrom}
-                    dateTo={dateTo}
-                    setDateTo={setDateTo}
                     onEditTransaction={handleEditTransaction}
                     onDeleteTransaction={handleDeleteTransaction}
                 />

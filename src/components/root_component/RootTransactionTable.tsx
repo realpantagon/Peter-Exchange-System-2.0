@@ -9,10 +9,6 @@ interface RootTransactionTableProps {
     selectedDateFilter: string | null
     setSelectedDateFilter: (date: string | null) => void
     availableDates: Date[]
-    dateFrom: string
-    setDateFrom: (date: string) => void
-    dateTo: string
-    setDateTo: (date: string) => void
     onEditTransaction: (transaction: Transaction) => void
     onDeleteTransaction?: (transaction: Transaction) => void
 }
@@ -24,10 +20,6 @@ export default function RootTransactionTable({
     selectedDateFilter,
     setSelectedDateFilter,
     availableDates,
-    dateFrom,
-    setDateFrom,
-    dateTo,
-    setDateTo,
     onEditTransaction,
     onDeleteTransaction,
 }: RootTransactionTableProps) {
@@ -42,7 +34,7 @@ export default function RootTransactionTable({
     // Reset page when filters change
     useEffect(() => {
         setCurrentPage(1)
-    }, [searchTerm, currencyFilter, branchFilter, selectedDateFilter, dateFrom, dateTo])
+    }, [searchTerm, currencyFilter, branchFilter, selectedDateFilter])
 
     const handleSort = (field: keyof Transaction) => {
         if (sortField === field) {
