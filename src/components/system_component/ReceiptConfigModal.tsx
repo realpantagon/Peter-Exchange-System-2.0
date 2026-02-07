@@ -13,6 +13,7 @@ export interface ReceiptConfig {
     licenseNoText: string
     showTaxId: boolean
     taxIdText: string
+    paperSize?: '80mm' | '58mm'
 }
 
 interface ReceiptConfigModalProps {
@@ -48,6 +49,31 @@ export default function ReceiptConfigModal({ config, setConfig, isOpen, onClose 
                 </div>
 
                 <div className="space-y-3">
+                    {/* Paper Size Selector */}
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                        <span className="font-medium text-gray-700 block mb-2">Paper Size</span>
+                        <div className="flex bg-gray-200 rounded-lg p-1">
+                            <button
+                                onClick={() => setConfig({ ...config, paperSize: '80mm' })}
+                                className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-all ${config.paperSize !== '58mm' // Default or 80mm
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                80mm (Standard)
+                            </button>
+                            <button
+                                onClick={() => setConfig({ ...config, paperSize: '58mm' })}
+                                className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-all ${config.paperSize === '58mm'
+                                    ? 'bg-white text-blue-600 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                58mm (Small)
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => handleToggle('showLogo')}>
                         <span className="font-medium text-gray-700">Show Logo</span>
                         <div className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${config.showLogo ? 'bg-blue-600' : 'bg-gray-300'}`}>

@@ -49,7 +49,8 @@ export default function SystemPage() {
     showLicenseNo: true,
     licenseNoText: 'MC325580007',
     showTaxId: true,
-    taxIdText: '0503558003166'
+    taxIdText: '0503558003166',
+    paperSize: '80mm'
   })
 
   // Edit mode

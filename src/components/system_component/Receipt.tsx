@@ -42,6 +42,9 @@ export default function Receipt({ transactions, config }: ReceiptProps) {
     const customer = transactions[0]
 
 
+    const paperSize = config?.paperSize || '80mm'
+    const isSmall = paperSize === '58mm'
+
     return (
         <>
             <style>
@@ -49,11 +52,11 @@ export default function Receipt({ transactions, config }: ReceiptProps) {
 @media print {
   @page {
     margin: 0;
-    size: 80mm auto;
+    size: ${paperSize} auto;
   }
 
   html, body {
-    width: 80mm;
+    width: ${paperSize};
     margin: 0;
     padding: 0;
     color: #000;
@@ -71,7 +74,7 @@ export default function Receipt({ transactions, config }: ReceiptProps) {
         `}
             </style>
 
-            <div className="receipt w-[80mm] px-4 py-2 text-black text-[13px] leading-snug flex flex-col items-center">
+            <div className={`receipt ${isSmall ? 'w-[58mm] text-[11px]' : 'w-[80mm] text-[13px]'} px-4 py-2 text-black leading-snug flex flex-col items-center`}>
                 {/* Header */}
                 <div className="w-full flex flex-col items-center text-center mb-2">
                     {showLogo && (
