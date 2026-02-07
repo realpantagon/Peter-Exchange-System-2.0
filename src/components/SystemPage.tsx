@@ -117,7 +117,7 @@ export default function SystemPage() {
       date.setDate(date.getDate() - 3)
       const startDate = date.toISOString().split('T')[0] // Format YYYY-MM-DD
 
-      const data = await getTransactions(startDate)
+      const data = await getTransactions(startDate, branchId || undefined)
       setTransactions(data)
     } catch (error) {
       console.error("Failed to fetch transactions", error)

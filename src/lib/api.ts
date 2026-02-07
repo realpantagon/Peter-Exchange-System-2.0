@@ -31,7 +31,7 @@ export const updateRate = async (id: number, rate: string): Promise<void> => {
 
 // --- Transaction Services ---
 
-export const getTransactions = async (startDate?: string): Promise<PeterExchangeTransaction[]> => {
+export const getTransactions = async (startDate?: string, branchId?: string): Promise<PeterExchangeTransaction[]> => {
     let query = supabase
         .from('Peter_Exchange_Transaction')
         .select('*')
@@ -39,6 +39,10 @@ export const getTransactions = async (startDate?: string): Promise<PeterExchange
 
     if (startDate) {
         query = query.gte('created_at', startDate)
+    }
+
+    if (branchId) {
+        query = query.eq('Branch', branchId)
     }
 
     const { data, error } = await query
