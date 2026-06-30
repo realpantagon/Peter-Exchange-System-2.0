@@ -5,6 +5,18 @@ export type PeterExchangeRate = {
     Rate: string | null
 }
 
+// Opening cash balance per branch per day (for daily cash-flow tracking).
+// NOTE: backing table `Peter_Exchange_Daily_Balance` is NOT yet created in Supabase.
+// See supabase/migrations/0001_daily_balance.sql — apply it when ready.
+export type PeterExchangeDailyBalance = {
+    id: number
+    created_at: string
+    Date: string            // 'YYYY-MM-DD'
+    Branch: string
+    Opening_Balance: number // starting THB cash for the day
+    Note: string | null
+}
+
 export type PeterExchangeTransaction = {
     id: number
     created_at: string

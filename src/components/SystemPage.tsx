@@ -8,6 +8,7 @@ import TransactionTable from './system_component/TransactionTable'
 import Receipt from './system_component/Receipt'
 import ReceiptConfigModal, { type ReceiptConfig } from './system_component/ReceiptConfigModal'
 import Toast from './system_component/Toast'
+import DailyCashFlow from './root_component/DailyCashFlow'
 import type { Rate, Transaction } from '../utils/currencyUtils'
 import { calculateExchangeTotal } from '../utils/currencyUtils'
 
@@ -55,6 +56,9 @@ export default function SystemPage() {
 
   // Edit mode
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+
+  // Cash flow panel (collapsible)
+  const [showCashFlow, setShowCashFlow] = useState(false)
 
   // Date filtering
   // Date filtering
@@ -288,7 +292,34 @@ export default function SystemPage() {
           onClose={() => setToast(null)}
         />
       )}
-      <div className="print:hidden min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 flex gap-4">
+      <div className="print:hidden min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 flex flex-col gap-4">
+
+        {/* Daily Cash Flow (scoped to this branch) */}
+        <div>
+          <button
+            onClick={() => setShowCashFlow(v => !v)}
+            className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            กระแสเงินสด (เงินตั้งต้น/ปลายวัน){branchId ? ` · ร้าน ${branchId}` : ''}
+            <svg className={`w-4 h-4 transition-transform ${showCashFlow ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showCashFlow && (
+            <div className="mt-3">
+              <DailyCashFlow
+                transactions={transactions}
+                branchId={branchId}
+                notify={(message, type) => setToast({ message, type })}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-4">
         {/* Sidebar - 1/5 of screen */}
         <div className="w-1/5 flex flex-col h-[calc(100vh-2rem)]">
           <div className="mb-3 flex flex-col items-center flex-shrink-0 gap-2">
@@ -396,6 +427,7 @@ export default function SystemPage() {
           setCustomCurrencyCode={setCustomCurrencyCode}
         />
 
+        </div>
       </div>
 
 

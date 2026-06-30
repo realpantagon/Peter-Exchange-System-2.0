@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { getTransactions, updateTransaction, deleteTransaction } from '../lib/api'
 import type { Transaction } from '../utils/currencyUtils'
 import RootTransactionTable from './root_component/RootTransactionTable'
@@ -7,33 +8,40 @@ import TransactionForm from './system_component/TransactionForm'
 import Toast from './system_component/Toast'
 import { calculateExchangeTotal } from '../utils/currencyUtils'
 import ClientTimeAnalytics from './root_component/ClientTimeAnalytics'
+import DailySalesAnalytics from './root_component/DailySalesAnalytics'
+import DailyCashFlow from './root_component/DailyCashFlow'
 
 export default function RootPage() {
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [loading, setLoading] = useState(true)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
     const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null) // Default to All (within range)
+    const [rangeDays, setRangeDays] = useState<number>(30) // How far back to fetch/analyze
 
     // Toast state
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
 
-    // Generate last 10 days
-    const availableDates = Array.from({ length: 10 }, (_, i) => {
+    // Date badges for the table: keep to the most recent days so the bar stays usable
+    const badgeDays = Math.min(rangeDays, 14)
+    const availableDates = Array.from({ length: badgeDays }, (_, i) => {
         const d = new Date()
-        d.setDate(d.getDate() - (9 - i)) // -9, ..., 0 (Today)
+        d.setDate(d.getDate() - (badgeDays - 1 - i))
         return d
     }).reverse() // Today first
 
     useEffect(() => {
         fetchTransactions()
-    }, [])
+        // Reset day filter when range changes to avoid filtering to an out-of-range day
+        setSelectedDateFilter(null)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rangeDays])
 
     const fetchTransactions = async () => {
         setLoading(true)
         try {
-            // Calculate date 10 days ago
+            // Calculate the start date based on the selected range
             const d = new Date()
-            d.setDate(d.getDate() - 10)
+            d.setDate(d.getDate() - rangeDays)
             const startDate = d.toISOString()
 
             const data = await getTransactions(startDate)
@@ -128,11 +136,43 @@ export default function RootPage() {
                     <h1 className="text-xl font-bold text-gray-800">Root Transaction Manager</h1>
                 </div>
                 <div className="flex items-center gap-4">
+                    {/* Quick navigation to other pages */}
+                    <nav className="flex flex-wrap items-center gap-1">
+                        {[
+                            { to: '/root/daily', label: 'รายละเอียดรายวัน', icon: '🗓️' },
+                            { to: '/', label: 'หน้าจอเรต', icon: '📊' },
+                            { to: '/system2025', label: 'ระบบทำรายการ', icon: '💱' },
+                            { to: '/admin2025', label: 'แอดมิน', icon: '⚙️' },
+                            { to: '/superadmin2025', label: 'ซูเปอร์แอดมิน', icon: '👑' },
+                        ].map(item => (
+                            <Link
+                                key={item.to}
+                                to={item.to}
+                                className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors flex items-center gap-1.5"
+                            >
+                                <span>{item.icon}</span>
+                                <span>{item.label}</span>
+                            </Link>
+                        ))}
+                    </nav>
                     <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-bold">ROOT ACCESS</span>
                 </div>
             </div>
 
             <div className="flex-1 p-6 w-full mx-auto space-y-6">
+
+                {/* Daily Cash Flow (opening balance -> closing balance per branch) */}
+                <DailyCashFlow
+                    transactions={transactions}
+                    notify={(message, type) => setToast({ message, type })}
+                />
+
+                {/* Daily Sales per Branch (uses full range data, has its own branch filter) */}
+                <DailySalesAnalytics
+                    transactions={transactions}
+                    rangeDays={rangeDays}
+                    setRangeDays={setRangeDays}
+                />
 
                 {/* Client Analytics Graph */}
                 <ClientTimeAnalytics transactions={filteredTransactions} />

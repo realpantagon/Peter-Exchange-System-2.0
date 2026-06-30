@@ -5,6 +5,7 @@ import SystemPage from './components/SystemPage'
 import SuperAdminPage from './components/SuperAdminPage'
 
 import RootPage from './components/RootPage'
+import DailyDetailPage from './components/DailyDetailPage'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/system2025" element={<SystemPage />} />
         <Route path="/superadmin2025" element={<SuperAdminPage />} />
         <Route path="/root" element={<RootPage />} />
+        <Route path="/root/daily" element={<DailyDetailPage />} />
       </Routes>
     </Router>
   )

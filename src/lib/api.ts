@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { PeterExchangeRate, PeterExchangeTransaction } from '../types/database'
+import type { PeterExchangeRate, PeterExchangeTransaction, PeterExchangeDailyBalance } from '../types/database'
 
 // --- Rate Services ---
 
@@ -31,7 +31,7 @@ export const updateRate = async (id: number, rate: string): Promise<void> => {
 
 // --- Transaction Services ---
 
-export const getTransactions = async (startDate?: string, branchId?: string): Promise<PeterExchangeTransaction[]> => {
+export const getTransactions = async (startDate?: string, branchId?: string, endDate?: string): Promise<PeterExchangeTransaction[]> => {
     let query = supabase
         .from('Peter_Exchange_Transaction')
         .select('*')
@@ -39,6 +39,10 @@ export const getTransactions = async (startDate?: string, branchId?: string): Pr
 
     if (startDate) {
         query = query.gte('created_at', startDate)
+    }
+
+    if (endDate) {
+        query = query.lte('created_at', endDate)
     }
 
     if (branchId) {
@@ -96,4 +100,58 @@ export const deleteTransaction = async (id: number): Promise<void> => {
         console.error('Error deleting transaction:', error)
         throw error
     }
+}
+
+// --- Daily Opening Balance (Cash Flow) Services ---
+// IMPORTANT: The `Peter_Exchange_Daily_Balance` table is NOT created in Supabase yet.
+// Apply supabase/migrations/0001_daily_balance.sql first. Until then `getDailyBalances`
+// fails gracefully (returns []) so the UI keeps working, while writes will throw.
+
+const DAILY_BALANCE_TABLE = 'Peter_Exchange_Daily_Balance'
+
+// Fetch opening balances. Optionally filter by a single date ('YYYY-MM-DD') and/or branch.
+export const getDailyBalances = async (date?: string, branchId?: string): Promise<PeterExchangeDailyBalance[]> => {
+    let query = supabase
+        .from(DAILY_BALANCE_TABLE)
+        .select('*')
+        .order('Date', { ascending: false })
+
+    if (date) {
+        query = query.eq('Date', date)
+    }
+
+    if (branchId) {
+        query = query.eq('Branch', branchId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+        // Table likely not created yet — degrade gracefully instead of crashing the page.
+        console.warn(`[getDailyBalances] "${DAILY_BALANCE_TABLE}" not ready yet:`, error.message)
+        return []
+    }
+
+    return data || []
+}
+
+// Create or update the opening balance for a (Date, Branch) pair.
+export const upsertDailyBalance = async (record: {
+    Date: string
+    Branch: string
+    Opening_Balance: number
+    Note?: string | null
+}): Promise<PeterExchangeDailyBalance> => {
+    const { data, error } = await supabase
+        .from(DAILY_BALANCE_TABLE)
+        .upsert(record, { onConflict: 'Date,Branch' })
+        .select()
+        .single()
+
+    if (error) {
+        console.error('Error saving daily balance:', error)
+        throw error
+    }
+
+    return data
 }
