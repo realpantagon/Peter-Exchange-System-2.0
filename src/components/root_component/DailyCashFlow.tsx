@@ -89,10 +89,11 @@ export default function DailyCashFlow({ transactions, notify, branchId, date }: 
                         Date: selectedDate,
                         Branch: b,
                         Opening_Balance: openingOf(b),
+                        Closing_Balance: closingOf(b),
                     })
                 )
             )
-            notify?.('บันทึกเงินตั้งต้นเรียบร้อย', 'success')
+            notify?.('บันทึกเงินตั้งต้น/ปลายวันเรียบร้อย', 'success')
         } catch {
             notify?.('ยังบันทึกไม่ได้ — ตาราง Peter_Exchange_Daily_Balance ยังไม่ถูกสร้างใน Supabase', 'error')
         } finally {
@@ -128,7 +129,7 @@ export default function DailyCashFlow({ transactions, notify, branchId, date }: 
                         disabled={saving || branches.length === 0}
                         className="px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
                     >
-                        {saving ? 'กำลังบันทึก...' : 'บันทึกเงินตั้งต้น'}
+                        {saving ? 'กำลังบันทึก...' : 'บันทึกเงินตั้งต้น/ปลายวัน'}
                     </button>
                 </div>
             </div>

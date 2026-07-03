@@ -11,6 +11,9 @@ import ClientTimeAnalytics from './root_component/ClientTimeAnalytics'
 import DailySalesAnalytics from './root_component/DailySalesAnalytics'
 import DailyCashFlow from './root_component/DailyCashFlow'
 
+// Fixed list of stores in the transaction system: ร้าน 4 และ ร้าน 11
+const BRANCHES = ['4', '11']
+
 export default function RootPage() {
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [loading, setLoading] = useState(true)
@@ -136,6 +139,19 @@ export default function RootPage() {
                     <h1 className="text-xl font-bold text-gray-800">Root Transaction Manager</h1>
                 </div>
                 <div className="flex items-center gap-4">
+                    {/* เปิดระบบทำรายการไวๆ แยกตามร้าน */}
+                    <div className="flex items-center gap-2">
+                        {BRANCHES.map(b => (
+                            <Link
+                                key={b}
+                                to={`/system2025?branchid=${b}`}
+                                className="px-4 py-1.5 rounded-lg text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5 shadow-sm"
+                            >
+                                <span>💱</span>
+                                <span>เปิดระบบ ร้าน {b}</span>
+                            </Link>
+                        ))}
+                    </div>
                     {/* Quick navigation to other pages */}
                     <nav className="flex flex-wrap items-center gap-1">
                         {[

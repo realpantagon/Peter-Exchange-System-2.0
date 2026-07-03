@@ -140,6 +140,7 @@ export const upsertDailyBalance = async (record: {
     Date: string
     Branch: string
     Opening_Balance: number
+    Closing_Balance?: number
     Note?: string | null
 }): Promise<PeterExchangeDailyBalance> => {
     const { data, error } = await supabase

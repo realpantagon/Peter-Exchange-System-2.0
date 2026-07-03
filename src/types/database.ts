@@ -14,6 +14,7 @@ export type PeterExchangeDailyBalance = {
     Date: string            // 'YYYY-MM-DD'
     Branch: string
     Opening_Balance: number // starting THB cash for the day
+    Closing_Balance: number // ending THB cash for the day
     Note: string | null
 }
 
