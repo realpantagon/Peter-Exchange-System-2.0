@@ -136,7 +136,6 @@ export default function RootPage() {
             <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
                 <div className="flex items-center gap-4">
                     <img src="/Ex_logo_6.png" alt="Logo" className="h-10 w-auto" />
-                    <h1 className="text-xl font-bold text-gray-800">Root Transaction Manager</h1>
                 </div>
                 <div className="flex items-center gap-4">
                     {/* เปิดระบบทำรายการไวๆ แยกตามร้าน */}
@@ -157,7 +156,6 @@ export default function RootPage() {
                         {[
                             { to: '/root/daily', label: 'รายละเอียดรายวัน', icon: '🗓️' },
                             { to: '/', label: 'หน้าจอเรต', icon: '📊' },
-                            { to: '/system2025', label: 'ระบบทำรายการ', icon: '💱' },
                             { to: '/admin2025', label: 'แอดมิน', icon: '⚙️' },
                             { to: '/superadmin2025', label: 'ซูเปอร์แอดมิน', icon: '👑' },
                         ].map(item => (
@@ -171,7 +169,6 @@ export default function RootPage() {
                             </Link>
                         ))}
                     </nav>
-                    <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-bold">ROOT ACCESS</span>
                 </div>
             </div>
 

@@ -13,8 +13,9 @@ export type PeterExchangeDailyBalance = {
     created_at: string
     Date: string            // 'YYYY-MM-DD'
     Branch: string
-    Opening_Balance: number // starting THB cash for the day
-    Closing_Balance: number // ending THB cash for the day
+    Opening_Balance: number // starting THB cash for the day (staff, every morning)
+    actual_closing_balance_system: number  // system-computed: opening + cash in - cash out
+    closing_balance_filled: number | null  // staff-counted cash entered after close (null until filled)
     Note: string | null
 }
 

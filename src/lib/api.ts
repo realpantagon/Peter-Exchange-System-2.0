@@ -136,11 +136,14 @@ export const getDailyBalances = async (date?: string, branchId?: string): Promis
 }
 
 // Create or update the opening balance for a (Date, Branch) pair.
+// Partial upsert on (Date, Branch): only the provided fields are written, so the
+// morning "opening" save and the end-of-day "closing" save don't overwrite each other.
 export const upsertDailyBalance = async (record: {
     Date: string
     Branch: string
-    Opening_Balance: number
-    Closing_Balance?: number
+    Opening_Balance?: number
+    actual_closing_balance_system?: number
+    closing_balance_filled?: number | null
     Note?: string | null
 }): Promise<PeterExchangeDailyBalance> => {
     const { data, error } = await supabase
