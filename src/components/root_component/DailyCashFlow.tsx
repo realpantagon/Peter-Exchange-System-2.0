@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
     getBalanceLogs,
     createBalanceLog,
     updateBalanceLog,
     deleteBalanceLog,
 } from '../../lib/api'
-import type { PeterExchangeBalanceLog, BalanceLogKind } from '../../types/database'
+import type { PeterExchangeBalanceLog } from '../../types/database'
 import type { Transaction } from '../../utils/currencyUtils'
 
 interface DailyCashFlowProps {
@@ -103,7 +104,7 @@ export default function DailyCashFlow({ transactions, notify, branchId, date, is
             </div>
 
             {/* Body */}
-            <div className="p-4 sm:p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-5">
                 {loading ? (
                     <div className="text-sm text-gray-400 py-8 text-center">กำลังโหลด...</div>
                 ) : branches.length === 0 ? (
@@ -140,212 +141,193 @@ interface BranchCashPanelProps {
 }
 
 function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }: BranchCashPanelProps) {
-    const [kind, setKind] = useState<BalanceLogKind>('opening')
-    const [amount, setAmount] = useState('')
+    const [openAmt, setOpenAmt] = useState('')
+    const [closeAmt, setCloseAmt] = useState('')
+    const [showNew, setShowNew] = useState(false)
     const [saving, setSaving] = useState(false)
     const [editingId, setEditingId] = useState<number | null>(null)
     const [editValue, setEditValue] = useState('')
 
-    // Total opening cash = sum of all opening entries (initial + top-ups)
-    const openingTotal = useMemo(
-        () => logs.filter(l => l.Kind === 'opening').reduce((s, l) => s + Number(l.Amount || 0), 0),
-        [logs]
-    )
-    const systemClosing = openingTotal + flow.thbIn - flow.thbOut
-
+    const openings = useMemo(() => logs.filter(l => l.Kind === 'opening'), [logs])
     const closings = useMemo(() => logs.filter(l => l.Kind === 'closing'), [logs])
-    const latestClosing = closings.length ? closings[closings.length - 1] : null
-    const latestDiff = latestClosing
-        ? Number(latestClosing.Amount || 0) - Number(latestClosing.System_Snapshot ?? systemClosing)
-        : null
+    const dayNet = flow.thbIn - flow.thbOut
 
-    const parsedAmount = parseFloat(amount)
-    const previewDiff = kind === 'closing' && !isNaN(parsedAmount) ? parsedAmount - systemClosing : null
+    // Pair opening[i] ↔ closing[i] into rounds (opening always leads within a round)
+    const rounds = openings.map((op, i) => ({ opening: op, closing: closings[i] ?? null }))
+    const allComplete = openings.length === closings.length          // every round has both halves (0===0 too)
+    const awaitingIndex = allComplete ? -1 : openings.length - 1     // last round waiting for its closing
 
-    const handleAdd = async () => {
-        if (isNaN(parsedAmount)) {
-            notify?.('กรุณากรอกจำนวนเงิน', 'error')
-            return
-        }
+    // Where does the "new opening" input go?
+    const showFirstOpening = allComplete && openings.length === 0    // very first round → show directly
+    const showAddedOpening = allComplete && openings.length > 0 && showNew
+    const showAddButton = allComplete && openings.length > 0 && !showNew
+
+    // Expected closing for the round currently awaiting a close
+    const awaitingOpening = awaitingIndex >= 0 ? Number(openings[awaitingIndex].Amount || 0) : 0
+    const expectedClosing = awaitingOpening + dayNet
+    const closeParsed = parseFloat(closeAmt)
+    const closePreviewDiff = !isNaN(closeParsed) ? closeParsed - expectedClosing : null
+
+    const saveOpening = async () => {
+        const v = parseFloat(openAmt)
+        if (isNaN(v)) { notify?.('กรุณากรอกจำนวนเงินเปิด', 'error'); return }
         setSaving(true)
         try {
-            await createBalanceLog({
-                Date: date,
-                Branch: branch,
-                Kind: kind,
-                Amount: parsedAmount,
-                System_Snapshot: kind === 'closing' ? systemClosing : null,
-            })
-            setAmount('')
-            notify?.(kind === 'opening' ? 'บันทึกเงินตั้งต้นแล้ว (ล็อก)' : 'บันทึกเงินปลายวันแล้ว (ล็อก)', 'success')
+            await createBalanceLog({ Date: date, Branch: branch, Kind: 'opening', Amount: v, System_Snapshot: null })
+            setOpenAmt(''); setShowNew(false)
+            notify?.('บันทึกเงินเปิดแล้ว (ล็อก)', 'success')
             onChanged()
         } catch {
-            notify?.('บันทึกไม่สำเร็จ — ตรวจสอบตาราง Peter_Exchange_Balance_Log ใน Supabase', 'error')
-        } finally {
-            setSaving(false)
-        }
+            notify?.('บันทึกไม่สำเร็จ — ตรวจสอบตาราง Peter_Exchange_Balance_Log', 'error')
+        } finally { setSaving(false) }
     }
 
-    const startEdit = (l: PeterExchangeBalanceLog) => {
-        setEditingId(l.id)
-        setEditValue(String(l.Amount))
+    const saveClosing = async () => {
+        const v = parseFloat(closeAmt)
+        if (isNaN(v)) { notify?.('กรุณากรอกจำนวนเงินปิด', 'error'); return }
+        setSaving(true)
+        try {
+            await createBalanceLog({ Date: date, Branch: branch, Kind: 'closing', Amount: v, System_Snapshot: expectedClosing })
+            setCloseAmt('')
+            notify?.('บันทึกเงินปิดแล้ว (ล็อก)', 'success')
+            onChanged()
+        } catch {
+            notify?.('บันทึกไม่สำเร็จ — ตรวจสอบตาราง Peter_Exchange_Balance_Log', 'error')
+        } finally { setSaving(false) }
     }
 
+    const startEdit = (l: PeterExchangeBalanceLog) => { setEditingId(l.id); setEditValue(String(l.Amount)) }
     const saveEdit = async (l: PeterExchangeBalanceLog) => {
         const v = parseFloat(editValue)
         if (isNaN(v)) { notify?.('จำนวนเงินไม่ถูกต้อง', 'error'); return }
         try {
             await updateBalanceLog(l.id, { Amount: v })
-            setEditingId(null)
-            notify?.('แก้ไขรายการเรียบร้อย', 'success')
-            onChanged()
-        } catch {
-            notify?.('แก้ไขไม่สำเร็จ', 'error')
-        }
+            setEditingId(null); notify?.('แก้ไขรายการเรียบร้อย', 'success'); onChanged()
+        } catch { notify?.('แก้ไขไม่สำเร็จ', 'error') }
+    }
+    const removeEntry = async (l: PeterExchangeBalanceLog) => {
+        if (!window.confirm(`ลบรายการ ${l.Kind === 'opening' ? 'เงินเปิด' : 'เงินปิด'} ฿${formatTHB(Number(l.Amount))} ?`)) return
+        try { await deleteBalanceLog(l.id); notify?.('ลบรายการเรียบร้อย', 'success'); onChanged() }
+        catch { notify?.('ลบไม่สำเร็จ', 'error') }
     }
 
-    const handleDelete = async (l: PeterExchangeBalanceLog) => {
-        if (!window.confirm(`ลบรายการ ${l.Kind === 'opening' ? 'เงินตั้งต้น' : 'เงินปลายวัน'} ฿${formatTHB(Number(l.Amount))} ?`)) return
-        try {
-            await deleteBalanceLog(l.id)
-            notify?.('ลบรายการเรียบร้อย', 'success')
-            onChanged()
-        } catch {
-            notify?.('ลบไม่สำเร็จ', 'error')
+    // Renders a locked entry cell (amount + time + lock / root controls)
+    const LockedEntry = ({ l }: { l: PeterExchangeBalanceLog }) => {
+        if (editingId === l.id) {
+            return (
+                <div className="flex items-center gap-1.5">
+                    <input
+                        type="number" value={editValue} autoFocus
+                        onChange={(e) => setEditValue(e.target.value)}
+                        className="w-28 px-2 py-1 rounded-lg border border-gray-300 text-right text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button onClick={() => saveEdit(l)} className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700">✓</button>
+                    <button onClick={() => setEditingId(null)} className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600 text-xs hover:bg-gray-200">✕</button>
+                </div>
+            )
         }
+        return (
+            <div className="flex items-baseline gap-2">
+                <span className="text-lg font-bold text-gray-900 tabular-nums">฿{formatTHB(Number(l.Amount))}</span>
+                <span className="text-[10px] text-gray-400">{formatTime(l.created_at)} น.</span>
+                {isRoot ? (
+                    <span className="flex items-center gap-0.5">
+                        <button onClick={() => startEdit(l)} title="แก้ไข" className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        </button>
+                        <button onClick={() => removeEntry(l)} title="ลบ" className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                    </span>
+                ) : (
+                    <span title="ล็อกแล้ว — แก้ไขได้เฉพาะ Root" className="text-gray-300">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    </span>
+                )}
+            </div>
+        )
     }
+
+    const totalRounds = rounds.length + (showFirstOpening || showAddedOpening ? 1 : 0)
 
     return (
         <div className="rounded-xl border border-gray-200 overflow-hidden">
-            {/* Branch title */}
-            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+            {/* Branch header with day flow */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
                 <span className="font-bold text-gray-800 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-md bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">{branch}</span>
                     ร้าน {branch}
                 </span>
-                <span className="text-[11px] text-gray-400">{logs.length} รายการวันนี้</span>
+                <span className="text-xs text-gray-500 flex items-center gap-3">
+                    <span className="text-green-600">รับ +฿{formatTHB(flow.thbIn)}</span>
+                    <span className="text-red-600">จ่าย −฿{formatTHB(flow.thbOut)}</span>
+                    <span className={dayNet >= 0 ? 'text-green-700 font-semibold' : 'text-red-700 font-semibold'}>
+                        สุทธิ {dayNet >= 0 ? '+' : '−'}฿{formatTHB(Math.abs(dayNet))}
+                    </span>
+                </span>
             </div>
 
-            {/* Stat tiles */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-gray-100">
-                <Stat label="เงินตั้งต้นรวม" value={`฿${formatTHB(openingTotal)}`} tone="neutral" />
-                <Stat label="เงินสดรับ (ขาย)" value={`+฿${formatTHB(flow.thbIn)}`} tone="green" />
-                <Stat label="เงินสดจ่าย (ซื้อ)" value={`−฿${formatTHB(flow.thbOut)}`} tone="red" />
-                <Stat label="ปลายวัน (ระบบคิด)" value={`฿${formatTHB(systemClosing)}`} tone="amber" />
-                <Stat label="ปลายวันจริง (ล่าสุด)" value={latestClosing ? `฿${formatTHB(Number(latestClosing.Amount))}` : '—'} tone="neutral" />
-                <Stat
-                    label="ส่วนต่าง"
-                    value={
-                        latestDiff === null ? '—'
-                            : latestDiff === 0 ? '✓ ตรง'
-                                : `${latestDiff > 0 ? '+' : '−'}฿${formatTHB(Math.abs(latestDiff))}`
-                    }
-                    tone={latestDiff === null ? 'neutral' : latestDiff === 0 ? 'green' : latestDiff > 0 ? 'blue' : 'red'}
-                />
-            </div>
-
-            {/* Timeline of entries */}
-            <div className="divide-y divide-gray-100">
-                {logs.length === 0 ? (
-                    <div className="px-4 py-3 text-xs text-gray-400 text-center">ยังไม่มีการบันทึกสำหรับวันนี้</div>
-                ) : (
-                    logs.map(l => {
-                        const isOpening = l.Kind === 'opening'
-                        const diff = l.Kind === 'closing'
-                            ? Number(l.Amount || 0) - Number(l.System_Snapshot ?? 0)
-                            : null
-                        return (
-                            <div key={l.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50">
-                                <span className="text-[11px] tabular-nums text-gray-400 w-11 shrink-0">{formatTime(l.created_at)}</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 ${isOpening ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                                    {isOpening ? '☀️ เปิด' : '🌙 ปิด'}
-                                </span>
-
-                                {editingId === l.id ? (
-                                    <div className="flex items-center gap-2 flex-1">
-                                        <input
-                                            type="number"
-                                            value={editValue}
-                                            autoFocus
-                                            onChange={(e) => setEditValue(e.target.value)}
-                                            className="w-32 px-2 py-1 rounded-lg border border-gray-300 text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                        />
-                                        <button onClick={() => saveEdit(l)} className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700">บันทึก</button>
-                                        <button onClick={() => setEditingId(null)} className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 text-xs hover:bg-gray-200">ยกเลิก</button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <span className="font-semibold text-gray-800 tabular-nums">฿{formatTHB(Number(l.Amount))}</span>
+            <div className="p-3 space-y-3">
+                {/* Persisted rounds */}
+                {rounds.map((r, i) => {
+                    const isAwaiting = i === awaitingIndex
+                    const diff = r.closing ? Number(r.closing.Amount || 0) - Number(r.closing.System_Snapshot ?? 0) : null
+                    return (
+                        <RoundCard
+                            key={r.opening.id}
+                            index={i + 1}
+                            left={<LockedEntry l={r.opening} />}
+                            right={
+                                r.closing ? (
+                                    <div className="space-y-1">
+                                        <LockedEntry l={r.closing} />
                                         {diff !== null && (
-                                            <span className={`text-[11px] font-medium ${diff === 0 ? 'text-green-600' : diff > 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                                {diff === 0 ? '(ตรงระบบ)' : `(${diff > 0 ? '+' : '−'}฿${formatTHB(Math.abs(diff))} vs ฿${formatTHB(Number(l.System_Snapshot ?? 0))})`}
-                                            </span>
+                                            <div className={`text-[11px] font-medium ${diff === 0 ? 'text-green-600' : diff > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                                ระบบคิด ฿{formatTHB(Number(r.closing.System_Snapshot ?? 0))} ·{' '}
+                                                {diff === 0 ? 'ตรงระบบ ✓' : `${diff > 0 ? 'เกิน +' : 'ขาด −'}฿${formatTHB(Math.abs(diff))}`}
+                                            </div>
                                         )}
-                                        <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                                            {isRoot ? (
-                                                <>
-                                                    <button onClick={() => startEdit(l)} title="แก้ไข" className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50">
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                                    </button>
-                                                    <button onClick={() => handleDelete(l)} title="ลบ" className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50">
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <span title="ล็อกแล้ว — แก้ไขได้เฉพาะ Root" className="text-gray-300">
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                                                </span>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        )
-                    })
-                )}
-            </div>
+                                    </div>
+                                ) : isAwaiting ? (
+                                    <ClosingInput
+                                        value={closeAmt}
+                                        onChange={setCloseAmt}
+                                        onSave={saveClosing}
+                                        saving={saving}
+                                        expected={expectedClosing}
+                                        previewDiff={closePreviewDiff}
+                                    />
+                                ) : (
+                                    <span className="text-xs text-gray-300">—</span>
+                                )
+                            }
+                            complete={!!r.closing}
+                        />
+                    )
+                })}
 
-            {/* Add entry form */}
-            <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-gray-50 border-t border-gray-200">
-                <div className="inline-flex rounded-lg bg-white border border-gray-200 p-0.5">
-                    <button
-                        onClick={() => setKind('opening')}
-                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${kind === 'opening' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                    >
-                        ☀️ เปิด
-                    </button>
-                    <button
-                        onClick={() => setKind('closing')}
-                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${kind === 'closing' ? 'bg-amber-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                    >
-                        🌙 ปิด
-                    </button>
-                </div>
-
-                <div className="relative flex-1 min-w-[140px]">
-                    <input
-                        type="number"
-                        inputMode="decimal"
-                        value={amount}
-                        placeholder={kind === 'closing' ? `นับเงินจริง (ระบบคิด ฿${formatTHB(systemClosing)})` : 'จำนวนเงินตั้งต้น'}
-                        onChange={(e) => setAmount(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && !saving) handleAdd() }}
-                        className="w-full pl-3 pr-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-amber-500"
+                {/* New round opening input (first round, or after pressing +) */}
+                {(showFirstOpening || showAddedOpening) && (
+                    <RoundCard
+                        index={totalRounds}
+                        left={
+                            <OpeningInput value={openAmt} onChange={setOpenAmt} onSave={saveOpening} saving={saving} />
+                        }
+                        right={<span className="text-xs text-gray-300">บันทึกเงินเปิดก่อน</span>}
+                        complete={false}
                     />
-                    {previewDiff !== null && (
-                        <span className={`absolute -bottom-4 right-1 text-[10px] font-medium ${previewDiff === 0 ? 'text-green-600' : previewDiff > 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                            {previewDiff === 0 ? 'ตรงระบบ' : `${previewDiff > 0 ? 'เกิน' : 'ขาด'} ฿${formatTHB(Math.abs(previewDiff))}`}
-                        </span>
-                    )}
-                </div>
+                )}
 
-                <button
-                    onClick={handleAdd}
-                    disabled={saving}
-                    className={`px-4 py-2 rounded-lg text-white text-sm font-semibold transition-colors disabled:opacity-50 ${kind === 'opening' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'}`}
-                >
-                    {saving ? 'กำลังบันทึก...' : '➕ บันทึก (ล็อก)'}
-                </button>
+                {/* Add-new-round button (only when the latest round is complete) */}
+                {showAddButton && (
+                    <button
+                        onClick={() => setShowNew(true)}
+                        className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-300 text-sm font-medium text-gray-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50/50 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                        เพิ่มรอบเปิด–ปิดใหม่ของวันนี้
+                    </button>
+                )}
             </div>
         </div>
     )
@@ -353,19 +335,71 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
 
 // ---------------------------------------------------------------------------
 
-const TONE: { [k: string]: string } = {
-    neutral: 'text-gray-900',
-    green: 'text-green-600',
-    red: 'text-red-600',
-    amber: 'text-amber-600',
-    blue: 'text-blue-600',
+// One round = opening (left) paired with closing (right)
+function RoundCard({ index, left, right, complete }: { index: number; left: ReactNode; right: ReactNode; complete: boolean }) {
+    return (
+        <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50/70 border-b border-gray-100">
+                <span className="text-[11px] font-semibold text-gray-500">รอบที่ {index}</span>
+                {complete
+                    ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">ครบแล้ว</span>
+                    : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">รอบันทึก</span>}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+                <div className="p-3 bg-blue-50/30">
+                    <div className="text-[11px] font-semibold text-blue-700 mb-1.5 flex items-center gap-1">☀️ เงินเปิด</div>
+                    {left}
+                </div>
+                <div className="p-3 bg-amber-50/30">
+                    <div className="text-[11px] font-semibold text-amber-700 mb-1.5 flex items-center gap-1">🌙 เงินปิด</div>
+                    {right}
+                </div>
+            </div>
+        </div>
+    )
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone: keyof typeof TONE }) {
+function OpeningInput({ value, onChange, onSave, saving }: { value: string; onChange: (v: string) => void; onSave: () => void; saving: boolean }) {
     return (
-        <div className="bg-white px-3 py-2.5">
-            <div className="text-[10px] text-gray-400 mb-0.5 leading-tight">{label}</div>
-            <div className={`text-sm font-bold tabular-nums ${TONE[tone]}`}>{value}</div>
+        <div className="flex items-center gap-2">
+            <input
+                type="number" inputMode="decimal" value={value} placeholder="จำนวนเงินเปิด"
+                onChange={(e) => onChange(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !saving) onSave() }}
+                className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button onClick={onSave} disabled={saving} className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+                ☀️ บันทึกเปิด
+            </button>
+        </div>
+    )
+}
+
+function ClosingInput({ value, onChange, onSave, saving, expected, previewDiff }: {
+    value: string; onChange: (v: string) => void; onSave: () => void; saving: boolean; expected: number; previewDiff: number | null
+}) {
+    return (
+        <div>
+            <div className="flex items-center gap-2">
+                <input
+                    type="number" inputMode="decimal" value={value} placeholder="นับเงินจริง"
+                    onChange={(e) => onChange(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !saving) onSave() }}
+                    className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+                <button onClick={onSave} disabled={saving} className="px-3 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap">
+                    🌙 บันทึกปิด
+                </button>
+            </div>
+            <div className="mt-1 text-[11px] text-gray-500">
+                ระบบคิด ฿{formatTHB(expected)}
+                {previewDiff !== null && previewDiff !== 0 && (
+                    <span className={previewDiff > 0 ? 'text-blue-600 font-medium' : 'text-red-600 font-medium'}>
+                        {' '}· {previewDiff > 0 ? 'เกิน +' : 'ขาด −'}฿{formatTHB(Math.abs(previewDiff))}
+                    </span>
+                )}
+                {previewDiff === 0 && <span className="text-green-600 font-medium"> · ตรงระบบ ✓</span>}
+            </div>
         </div>
     )
 }
