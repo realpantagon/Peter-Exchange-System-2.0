@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { PeterExchangeRate, PeterExchangeTransaction, PeterExchangeDailyBalance } from '../types/database'
+import type { PeterExchangeRate, PeterExchangeTransaction, PeterExchangeBalanceLog, BalanceLogKind } from '../types/database'
 
 // --- Rate Services ---
 
@@ -102,19 +102,21 @@ export const deleteTransaction = async (id: number): Promise<void> => {
     }
 }
 
-// --- Daily Opening Balance (Cash Flow) Services ---
-// IMPORTANT: The `Peter_Exchange_Daily_Balance` table is NOT created in Supabase yet.
-// Apply supabase/migrations/0001_daily_balance.sql first. Until then `getDailyBalances`
-// fails gracefully (returns []) so the UI keeps working, while writes will throw.
+// --- Daily Cash Balance Log (Cash Flow) Services ---
+// Append-only log: staff add opening/closing entries throughout the day, each locked
+// once saved. Only root (root pages) edits/deletes — enforced in the UI.
+// Backing table: supabase/migrations/0004_balance_log.sql. Reads degrade gracefully
+// (return []) until the table exists.
 
-const DAILY_BALANCE_TABLE = 'Peter_Exchange_Daily_Balance'
+const BALANCE_LOG_TABLE = 'Peter_Exchange_Balance_Log'
 
-// Fetch opening balances. Optionally filter by a single date ('YYYY-MM-DD') and/or branch.
-export const getDailyBalances = async (date?: string, branchId?: string): Promise<PeterExchangeDailyBalance[]> => {
+// Fetch balance-log entries. Optionally filter by date ('YYYY-MM-DD') and/or branch.
+// Ordered oldest→newest so the timeline reads top-to-bottom by time.
+export const getBalanceLogs = async (date?: string, branchId?: string): Promise<PeterExchangeBalanceLog[]> => {
     let query = supabase
-        .from(DAILY_BALANCE_TABLE)
+        .from(BALANCE_LOG_TABLE)
         .select('*')
-        .order('Date', { ascending: false })
+        .order('created_at', { ascending: true })
 
     if (date) {
         query = query.eq('Date', date)
@@ -128,34 +130,61 @@ export const getDailyBalances = async (date?: string, branchId?: string): Promis
 
     if (error) {
         // Table likely not created yet — degrade gracefully instead of crashing the page.
-        console.warn(`[getDailyBalances] "${DAILY_BALANCE_TABLE}" not ready yet:`, error.message)
+        console.warn(`[getBalanceLogs] "${BALANCE_LOG_TABLE}" not ready yet:`, error.message)
         return []
     }
 
     return data || []
 }
 
-// Create or update the opening balance for a (Date, Branch) pair.
-// Partial upsert on (Date, Branch): only the provided fields are written, so the
-// morning "opening" save and the end-of-day "closing" save don't overwrite each other.
-export const upsertDailyBalance = async (record: {
+// Append a new (locked) balance-log entry.
+export const createBalanceLog = async (record: {
     Date: string
     Branch: string
-    Opening_Balance?: number
-    actual_closing_balance_system?: number
-    closing_balance_filled?: number | null
+    Kind: BalanceLogKind
+    Amount: number
+    System_Snapshot?: number | null
     Note?: string | null
-}): Promise<PeterExchangeDailyBalance> => {
+}): Promise<PeterExchangeBalanceLog> => {
     const { data, error } = await supabase
-        .from(DAILY_BALANCE_TABLE)
-        .upsert(record, { onConflict: 'Date,Branch' })
+        .from(BALANCE_LOG_TABLE)
+        .insert(record)
         .select()
         .single()
 
     if (error) {
-        console.error('Error saving daily balance:', error)
+        console.error('Error creating balance log:', error)
         throw error
     }
 
     return data
+}
+
+// Root-only: edit an existing entry's amount / note.
+export const updateBalanceLog = async (
+    id: number,
+    patch: { Amount?: number; Note?: string | null }
+): Promise<void> => {
+    const { error } = await supabase
+        .from(BALANCE_LOG_TABLE)
+        .update(patch)
+        .eq('id', id)
+
+    if (error) {
+        console.error('Error updating balance log:', error)
+        throw error
+    }
+}
+
+// Root-only: delete an entry.
+export const deleteBalanceLog = async (id: number): Promise<void> => {
+    const { error } = await supabase
+        .from(BALANCE_LOG_TABLE)
+        .delete()
+        .eq('id', id)
+
+    if (error) {
+        console.error('Error deleting balance log:', error)
+        throw error
+    }
 }

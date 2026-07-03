@@ -187,6 +187,7 @@ export default function DailyDetailPage() {
                     date={selectedDate}
                     branchId={branchFilter || undefined}
                     notify={(message, type) => setToast({ message, type })}
+                    isRoot
                 />
 
                 {/* Detailed timeline */}

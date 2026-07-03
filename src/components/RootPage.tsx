@@ -178,6 +178,7 @@ export default function RootPage() {
                 <DailyCashFlow
                     transactions={transactions}
                     notify={(message, type) => setToast({ message, type })}
+                    isRoot
                 />
 
                 {/* Daily Sales per Branch (uses full range data, has its own branch filter) */}
