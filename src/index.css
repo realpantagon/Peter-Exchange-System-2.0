@@ -1,1 +1,81 @@
 @import "tailwindcss";
+
+/* ---------------------------------------------------------------------
+   Vault / ledger tokens — global, so ledger-styled modules (e.g. the
+   till card embedded in the staff /system2025 screen) render correctly
+   even outside the /root page. A ledger metaphor: light "paper ledger"
+   surfaces, brass accent, black/red ink for credit/debit, tabular
+   monospace for every figure.
+--------------------------------------------------------------------- */
+:root {
+  --vault-bg: #f6f3ec;
+  --vault-panel: #ffffff;
+  --vault-panel-raised: #f1ece0;
+  --vault-hairline: #e1dacb;
+  --vault-hairline-soft: #ece5d5;
+  --vault-paper: #221e14;
+  --vault-muted: #8a8370;
+  --vault-brass: #b8860b;
+  --vault-brass-bright: #d9a521;
+  --vault-ink-credit: #1e7a4c;
+  --vault-ink-debit: #c0392b;
+  --vault-branch-blue: #2a5fcc;
+}
+
+/* .root-vault applies the ledger palette as the page's own background —
+   used by the /root dashboard shell. Ledger-styled cards elsewhere
+   (e.g. DailyCashFlow on /system2025) use the tokens above directly
+   and stay self-contained "islands" regardless of the host page. */
+.root-vault {
+  background-color: var(--vault-bg);
+  color: var(--vault-paper);
+  font-family: 'IBM Plex Sans', 'IBM Plex Sans Thai', system-ui, sans-serif;
+}
+
+.font-display {
+  font-family: 'IBM Plex Sans', 'IBM Plex Sans Thai', system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.font-figure {
+  /* IBM Plex Mono has no ฿ glyph; IBM Plex Sans Thai is listed as the
+     fallback so the baht sign renders correctly instead of tofu/a
+     mismatched system substitute, while digits still use the mono face. */
+  font-family: 'IBM Plex Mono', 'IBM Plex Sans Thai', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Thin, dark scrollbars for dense ledger tables */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--vault-hairline) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--vault-hairline);
+  border-radius: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--vault-brass);
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.animate-slide-in {
+  animation: slide-in 0.25s ease-out;
+}

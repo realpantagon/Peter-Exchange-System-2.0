@@ -298,13 +298,26 @@ export default function SystemPage() {
         <div>
           <button
             onClick={() => setShowCashFlow(v => !v)}
-            className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center gap-3 px-5 py-3.5 rounded-xl text-left shadow-md hover:shadow-lg transition-all"
+            style={{
+              background: 'linear-gradient(135deg, #cba135, #a9812a)',
+              boxShadow: showCashFlow ? '0 0 0 2px #cba135, 0 4px 12px rgba(184, 134, 11,0.35)' : '0 4px 12px rgba(184, 134, 11,0.25)'
+            }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            กระแสเงินสด (เงินตั้งต้น/ปลายวัน){branchId ? ` · ร้าน ${branchId}` : ''}
-            <svg className={`w-4 h-4 transition-transform ${showCashFlow ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-bold text-white">
+                กระแสเงินสด (เงินตั้งต้น/ปลายวัน){branchId ? ` · ร้าน ${branchId}` : ''}
+              </span>
+              <span className="block text-xs text-amber-50/90 mt-0.5">
+                {showCashFlow ? 'กำลังแสดงอยู่ — แตะเพื่อซ่อน' : 'บันทึกเงินเปิด/ปิดร้านวันนี้ — แตะเพื่อเปิด'}
+              </span>
+            </span>
+            <svg className={`w-5 h-5 text-white flex-shrink-0 transition-transform ${showCashFlow ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>

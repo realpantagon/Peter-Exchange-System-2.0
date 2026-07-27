@@ -119,14 +119,28 @@ export default function RootTransactionTable({
         return isNaN(n) ? '0.00' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     }
 
+    const columns: { label: string; field: keyof Transaction; align: 'left' | 'center' | 'right' }[] = [
+        { label: 'ID', field: 'id', align: 'left' },
+        { label: 'วันที่/เวลา', field: 'created_at', align: 'left' },
+        { label: 'ประเภท', field: 'Transaction_Type', align: 'center' },
+        { label: 'สกุลเงิน', field: 'Cur', align: 'center' },
+        { label: 'จำนวน', field: 'Amount', align: 'right' },
+        { label: 'เรต', field: 'Rate', align: 'right' },
+        { label: 'รวม (THB)', field: 'Total_TH', align: 'right' },
+        { label: 'พาสปอร์ต', field: 'Customer_Passport_no', align: 'left' },
+        { label: 'สัญชาติ', field: 'Customer_Nationality', align: 'left' },
+        { label: 'ลูกค้า', field: 'Customer_Name', align: 'left' },
+        { label: 'ร้าน', field: 'Branch', align: 'left' },
+    ]
+
     return (
-        <div className="flex flex-col h-full bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-100/50 overflow-hidden">
+        <div className="root-vault flex flex-col h-full rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>
             {/* Toolbar */}
-            <div className="p-5 border-b border-gray-100 flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center bg-white/80">
-                <div className="flex flex-col gap-2">
-                    <h2 className="text-xl font-bold text-gray-800 tracking-tight">Recent Transactions</h2>
-                    <p className="text-sm text-gray-500 font-medium">
-                        Showing {filteredTransactions.length} results
+            <div className="p-5 flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center" style={{ borderBottom: '1px solid var(--vault-hairline)' }}>
+                <div className="flex flex-col gap-1">
+                    <h2 className="font-display text-lg font-semibold tracking-tight" style={{ color: 'var(--vault-paper)' }}>รายการทั้งหมด</h2>
+                    <p className="text-sm font-figure" style={{ color: 'var(--vault-muted)' }}>
+                        แสดง {filteredTransactions.length} รายการ
                     </p>
                 </div>
 
@@ -134,14 +148,15 @@ export default function RootTransactionTable({
                     {/* Search */}
                     <div className="relative group w-full sm:w-56">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="h-4 w-4" style={{ color: 'var(--vault-muted)' }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                         </div>
                         <input
                             type="text"
-                            placeholder="Search Name, Passport..."
-                            className="pl-10 pr-4 py-2.5 w-full border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm outline-none bg-gray-50/50 focus:bg-white"
+                            placeholder="ค้นหาชื่อ, พาสปอร์ต..."
+                            className="pl-9 pr-4 py-2.5 w-full rounded-xl text-sm outline-none transition-all"
+                            style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)', color: 'var(--vault-paper)' }}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -149,39 +164,39 @@ export default function RootTransactionTable({
 
                     {/* Currency Filter */}
                     <select
-                        className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm outline-none bg-gray-50/50 focus:bg-white cursor-pointer hover:bg-gray-50 bg-none"
+                        className="px-4 py-2.5 rounded-xl text-sm outline-none transition-all cursor-pointer"
+                        style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)', color: 'var(--vault-paper)' }}
                         value={currencyFilter}
                         onChange={(e) => setCurrencyFilter(e.target.value)}
                     >
-                        <option value="">All Currencies</option>
+                        <option value="">ทุกสกุลเงิน</option>
                         {uniqueCurrencies.map(c => (
                             <option key={c} value={c}>{c}</option>
                         ))}
                     </select>
 
-                    {/* Branch Filter Card */}
-                    <div className="relative">
-                        <select
-                            className="pl-4 pr-10 py-2.5 border border-purple-200 rounded-xl text-sm font-medium text-purple-700 bg-purple-50 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all shadow-sm outline-none appearance-none cursor-pointer hover:bg-purple-100"
-                            value={branchFilter}
-                            onChange={(e) => setBranchFilter(e.target.value)}
-                        >
-                            <option value="">All Branches</option>
-                            {uniqueBranches.map(b => (
-                                <option key={b} value={b}>{b}</option>
-                            ))}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-purple-600">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                        </div>
-                    </div>
+                    {/* Branch Filter */}
+                    <select
+                        className="px-4 py-2.5 rounded-xl text-sm font-medium outline-none transition-all cursor-pointer"
+                        style={{ backgroundColor: 'rgba(184, 134, 11,0.1)', border: '1px solid rgba(184, 134, 11,0.35)', color: 'var(--vault-brass)' }}
+                        value={branchFilter}
+                        onChange={(e) => setBranchFilter(e.target.value)}
+                    >
+                        <option value="">ทุกร้าน</option>
+                        {uniqueBranches.map(b => (
+                            <option key={b} value={b}>ร้าน {b}</option>
+                        ))}
+                    </select>
 
                     <button
                         onClick={onRefresh}
-                        className="p-2.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-gray-200 hover:border-blue-200 shadow-sm"
+                        className="p-2.5 rounded-xl transition-all"
+                        style={{ color: 'var(--vault-muted)', border: '1px solid var(--vault-hairline)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--vault-brass)'; e.currentTarget.style.borderColor = 'var(--vault-brass)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--vault-muted)'; e.currentTarget.style.borderColor = 'var(--vault-hairline)' }}
                         title="Refresh"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>
@@ -189,13 +204,16 @@ export default function RootTransactionTable({
             </div>
 
             {/* Filter Pills / Date Selection */}
-            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/30 flex flex-wrap gap-2 items-center">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-2">Filter Date:</span>
+            <div className="px-5 py-3 flex flex-wrap gap-2 items-center" style={{ borderBottom: '1px solid var(--vault-hairline)', backgroundColor: 'var(--vault-panel-raised)' }}>
+                <span className="text-xs font-semibold uppercase tracking-wider mr-1" style={{ color: 'var(--vault-muted)' }}>วันที่:</span>
                 <button
                     onClick={() => setSelectedDateFilter(null)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${!selectedDateFilter ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                    style={!selectedDateFilter
+                        ? { backgroundColor: 'var(--vault-brass)', color: '#1a1305' }
+                        : { backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-muted)', border: '1px solid var(--vault-hairline)' }}
                 >
-                    All Days
+                    ทั้งหมด
                 </button>
                 {availableDates.map(date => {
                     const dateStr = date.toDateString()
@@ -206,13 +224,13 @@ export default function RootTransactionTable({
                         <button
                             key={dateStr}
                             onClick={() => setSelectedDateFilter(isSelected ? null : dateStr)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isSelected
-                                ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                                }`}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium font-figure transition-all"
+                            style={isSelected
+                                ? { backgroundColor: 'var(--vault-brass)', color: '#1a1305' }
+                                : { backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-muted)', border: '1px solid var(--vault-hairline)' }}
                         >
                             {date.toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric' })}
-                            {isToday && <span className="ml-1 opacity-75">(Today)</span>}
+                            {isToday && <span className="ml-1 opacity-75">(วันนี้)</span>}
                         </button>
                     )
                 })}
@@ -222,56 +240,43 @@ export default function RootTransactionTable({
             <div className="flex-1 overflow-auto custom-scrollbar">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-gray-50/80 sticky top-0 z-10 backdrop-blur-sm border-b border-gray-200">
-                            {[
-                                { label: 'ID', field: 'id', align: 'left' },
-                                { label: 'Date/Time', field: 'created_at', align: 'left' },
-                                { label: 'Type', field: 'Transaction_Type', align: 'center' },
-                                { label: 'Currency', field: 'Cur', align: 'center' },
-                                { label: 'Amount', field: 'Amount', align: 'right' },
-                                { label: 'Rate', field: 'Rate', align: 'right' },
-                                { label: 'Total (THB)', field: 'Total_TH', align: 'right' },
-                                { label: 'Passport', field: 'Customer_Passport_no', align: 'left' },
-                                { label: 'Nationality', field: 'Customer_Nationality', align: 'left' },
-                                { label: 'Customer', field: 'Customer_Name', align: 'left' },
-                                { label: 'Branch', field: 'Branch', align: 'left' },
-                            ].map((col) => (
+                        <tr className="sticky top-0 z-10" style={{ backgroundColor: 'var(--vault-panel)', borderBottom: '1px solid var(--vault-hairline)' }}>
+                            {columns.map((col) => (
                                 <th
                                     key={col.label}
-                                    className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-blue-600 transition-colors text-${col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left'}`}
-                                    onClick={() => handleSort(col.field as keyof Transaction)}
+                                    className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wider cursor-pointer transition-colors ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'}`}
+                                    style={{ color: sortField === col.field ? 'var(--vault-brass)' : 'var(--vault-muted)' }}
+                                    onClick={() => handleSort(col.field)}
                                 >
                                     <div className={`flex items-center gap-1 ${col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'}`}>
                                         {col.label}
                                         {sortField === col.field && (
-                                            <span className="text-blue-500">
-                                                {sortDirection === 'asc' ? '↑' : '↓'}
-                                            </span>
+                                            <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
                                         )}
                                     </div>
                                 </th>
                             ))}
-                            <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                            <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-right" style={{ color: 'var(--vault-muted)' }}>จัดการ</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan={10} className="px-6 py-20 text-center">
+                                <td colSpan={12} className="px-6 py-20 text-center">
                                     <div className="flex flex-col items-center justify-center gap-3">
-                                        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                                        <p className="text-gray-400 text-sm animate-pulse">Loading transactions...</p>
+                                        <div className="w-8 h-8 border-4 rounded-full animate-spin" style={{ borderColor: 'var(--vault-brass)', borderTopColor: 'transparent' }}></div>
+                                        <p className="text-sm animate-pulse" style={{ color: 'var(--vault-muted)' }}>กำลังโหลดรายการ...</p>
                                     </div>
                                 </td>
                             </tr>
                         ) : paginatedTransactions.length === 0 ? (
                             <tr>
-                                <td colSpan={10} className="px-6 py-20 text-center">
+                                <td colSpan={12} className="px-6 py-20 text-center">
                                     <div className="flex flex-col items-center justify-center gap-3">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12" style={{ color: 'var(--vault-hairline)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                         </svg>
-                                        <p className="text-gray-400 font-medium">No transactions found</p>
+                                        <p className="font-medium" style={{ color: 'var(--vault-muted)' }}>ไม่พบรายการ</p>
                                     </div>
                                 </td>
                             </tr>
@@ -279,68 +284,74 @@ export default function RootTransactionTable({
                             paginatedTransactions.map((transaction) => (
                                 <tr
                                     key={transaction.id}
-                                    className="hover:bg-blue-50/50 transition-colors group"
+                                    className="transition-colors group"
+                                    style={{ borderBottom: '1px solid var(--vault-hairline-soft)' }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(184, 134, 11,0.06)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                 >
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
-                                        <span className="font-semibold text-gray-700">#{transaction.id}</span>
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-xs font-figure" style={{ color: 'var(--vault-muted)' }}>
+                                        <span className="font-semibold" style={{ color: 'var(--vault-paper)' }}>#{transaction.id}</span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
-                                        <span className="font-semibold text-gray-700">{formatDate(transaction.created_at)}</span>
-                                        <span className="block font-semibold text-gray-700">{formatTime(transaction.created_at)}</span>
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-xs font-figure">
+                                        <span className="block font-medium" style={{ color: 'var(--vault-paper)' }}>{formatDate(transaction.created_at)}</span>
+                                        <span className="block" style={{ color: 'var(--vault-muted)' }}>{formatTime(transaction.created_at)}</span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                                        <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border ${transaction.Transaction_Type === 'Buying'
-                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                            : 'bg-rose-50 text-rose-700 border-rose-100'
-                                            }`}>
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-center">
+                                        <span
+                                            className="px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                            style={transaction.Transaction_Type === 'Buying'
+                                                ? { backgroundColor: 'rgba(79,174,129,0.15)', color: 'var(--vault-ink-credit)' }
+                                                : { backgroundColor: 'rgba(224,101,74,0.15)', color: 'var(--vault-ink-debit)' }}
+                                        >
                                             {transaction.Transaction_Type || 'N/A'}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-center">
                                         <div className="flex items-center justify-center gap-2">
                                             <img
                                                 src={getFlagIcon(transaction.Cur || '')}
                                                 alt={transaction.Cur || ''}
-                                                className="w-5 h-5 object-contain rounded-full shadow-sm"
+                                                className="w-5 h-5 object-contain rounded-full"
                                                 onError={(e) => {
                                                     (e.target as HTMLImageElement).style.display = 'none'; // Hide if broken
                                                 }}
                                             />
-                                            <span className="font-bold text-gray-700">{transaction.Cur}</span>
+                                            <span className="font-bold font-figure" style={{ color: 'var(--vault-paper)' }}>{transaction.Cur}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700 text-right font-mono">
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-sm text-right font-figure" style={{ color: 'var(--vault-paper)' }}>
                                         {formatNumber(transaction.Amount)}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right font-mono">
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-sm text-right font-figure" style={{ color: 'var(--vault-muted)' }}>
                                         {formatNumber(transaction.Rate)}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 text-right font-mono">
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-sm font-bold text-right font-figure" style={{ color: 'var(--vault-brass)' }}>
                                         {formatNumber(transaction.Total_TH)}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 max-w-[120px] truncate" title={transaction.Customer_Passport_no || ''}>
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-xs max-w-[120px] truncate font-figure" style={{ color: 'var(--vault-muted)' }} title={transaction.Customer_Passport_no || ''}>
                                         {transaction.Customer_Passport_no || '-'}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600 font-medium max-w-[150px] truncate" title={transaction.Customer_Nationality || ''}>
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-xs font-medium max-w-[150px] truncate" style={{ color: 'var(--vault-paper)' }} title={transaction.Customer_Nationality || ''}>
                                         {transaction.Customer_Nationality || '-'}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600 font-medium max-w-[150px] truncate" title={transaction.Customer_Name || ''}>
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-xs font-medium max-w-[150px] truncate" style={{ color: 'var(--vault-paper)' }} title={transaction.Customer_Name || ''}>
                                         {transaction.Customer_Name || '-'}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 max-w-[120px] truncate" title={transaction.Branch || ''}>
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-xs max-w-[120px] truncate" style={{ color: 'var(--vault-muted)' }} title={transaction.Branch || ''}>
                                         {transaction.Branch || '-'}
                                     </td>
 
                                     {/* Action Buttons */}
-                                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                                        <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                                    <td className="px-5 py-3.5 whitespace-nowrap text-right">
+                                        <div className="flex items-center justify-end gap-1.5 opacity-70 group-hover:opacity-100 transition-opacity">
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation()
                                                     onEditTransaction(transaction)
                                                 }}
-                                                className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-all"
-                                                title="Edit"
+                                                className="p-1.5 rounded-lg transition-all"
+                                                style={{ color: 'var(--vault-branch-blue)' }}
+                                                title="แก้ไข"
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -353,8 +364,9 @@ export default function RootTransactionTable({
                                                         e.stopPropagation()
                                                         onDeleteTransaction(transaction)
                                                     }}
-                                                    className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-all"
-                                                    title="Delete"
+                                                    className="p-1.5 rounded-lg transition-all"
+                                                    style={{ color: 'var(--vault-ink-debit)' }}
+                                                    title="ลบ"
                                                 >
                                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -371,17 +383,20 @@ export default function RootTransactionTable({
             </div>
 
             {/* Pagination & Footer */}
-            <div className="px-6 py-4 border-t border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-gray-50/50">
+            <div className="px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4" style={{ borderTop: '1px solid var(--vault-hairline)', backgroundColor: 'var(--vault-panel-raised)' }}>
                 <div className="flex flex-col gap-1">
-                    <span className="text-sm text-gray-600 font-medium">Total: <span className="text-gray-900">{formatNumber(totalAmountTHB)} THB</span></span>
-                    <span className="text-xs text-gray-400">{totalTransactions} transactions found</span>
+                    <span className="text-sm font-figure" style={{ color: 'var(--vault-muted)' }}>
+                        รวม: <span className="font-semibold" style={{ color: 'var(--vault-brass)' }}>{formatNumber(totalAmountTHB)} THB</span>
+                    </span>
+                    <span className="text-xs font-figure" style={{ color: 'var(--vault-muted)' }}>{totalTransactions} รายการ</span>
                 </div>
 
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => setCurrentPage(1)}
                         disabled={currentPage === 1}
-                        className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="p-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        style={{ border: '1px solid var(--vault-hairline)', color: 'var(--vault-muted)' }}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
@@ -390,26 +405,29 @@ export default function RootTransactionTable({
                     <button
                         onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                         disabled={currentPage === 1}
-                        className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        style={{ border: '1px solid var(--vault-hairline)', color: 'var(--vault-muted)' }}
                     >
-                        Previous
+                        ก่อนหน้า
                     </button>
 
-                    <span className="text-sm font-medium text-gray-700 px-2">
-                        Page {currentPage} of {Math.max(totalPages, 1)}
+                    <span className="text-sm font-medium font-figure px-2" style={{ color: 'var(--vault-paper)' }}>
+                        {currentPage} / {Math.max(totalPages, 1)}
                     </span>
 
                     <button
                         onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                         disabled={currentPage === totalPages || totalPages === 0}
-                        className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        style={{ border: '1px solid var(--vault-hairline)', color: 'var(--vault-muted)' }}
                     >
-                        Next
+                        ถัดไป
                     </button>
                     <button
                         onClick={() => setCurrentPage(totalPages)}
                         disabled={currentPage === totalPages || totalPages === 0}
-                        className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="p-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        style={{ border: '1px solid var(--vault-hairline)', color: 'var(--vault-muted)' }}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
