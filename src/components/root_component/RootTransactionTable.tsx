@@ -178,7 +178,7 @@ export default function RootTransactionTable({
                     {/* Branch Filter */}
                     <select
                         className="px-4 py-2.5 rounded-xl text-sm font-medium outline-none transition-all cursor-pointer"
-                        style={{ backgroundColor: 'rgba(184, 134, 11,0.1)', border: '1px solid rgba(184, 134, 11,0.35)', color: 'var(--vault-brass)' }}
+                        style={{ backgroundColor: 'var(--vault-brass-tint)', border: '1px solid var(--vault-brass-border)', color: 'var(--vault-brass)' }}
                         value={branchFilter}
                         onChange={(e) => setBranchFilter(e.target.value)}
                     >
@@ -210,7 +210,7 @@ export default function RootTransactionTable({
                     onClick={() => setSelectedDateFilter(null)}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                     style={!selectedDateFilter
-                        ? { backgroundColor: 'var(--vault-brass)', color: '#1a1305' }
+                        ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }
                         : { backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-muted)', border: '1px solid var(--vault-hairline)' }}
                 >
                     ทั้งหมด
@@ -226,7 +226,7 @@ export default function RootTransactionTable({
                             onClick={() => setSelectedDateFilter(isSelected ? null : dateStr)}
                             className="px-3 py-1.5 rounded-lg text-xs font-medium font-figure transition-all"
                             style={isSelected
-                                ? { backgroundColor: 'var(--vault-brass)', color: '#1a1305' }
+                                ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }
                                 : { backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-muted)', border: '1px solid var(--vault-hairline)' }}
                         >
                             {date.toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric' })}
@@ -286,7 +286,7 @@ export default function RootTransactionTable({
                                     key={transaction.id}
                                     className="transition-colors group"
                                     style={{ borderBottom: '1px solid var(--vault-hairline-soft)' }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(184, 134, 11,0.06)')}
+                                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--vault-brass-faint)')}
                                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                 >
                                     <td className="px-5 py-3.5 whitespace-nowrap text-xs font-figure" style={{ color: 'var(--vault-muted)' }}>

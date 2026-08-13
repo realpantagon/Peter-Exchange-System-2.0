@@ -1,25 +1,32 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------
-   Vault / ledger tokens — global, so ledger-styled modules (e.g. the
-   till card embedded in the staff /system2025 screen) render correctly
-   even outside the /root page. A ledger metaphor: light "paper ledger"
-   surfaces, brass accent, black/red ink for credit/debit, tabular
-   monospace for every figure.
+   Vault / ledger tokens — global, so ledger-styled modules (the /root
+   dashboard, the till card embedded in the staff /system2025 screen,
+   the /root/daily page) all render from one shared palette: white
+   surfaces, a blue accent, black/red ink for credit/debit, tabular
+   monospace for every figure. Token names keep their original "brass"
+   naming (avoids a mechanical rename across every consumer) even though
+   the accent itself is blue now.
 --------------------------------------------------------------------- */
 :root {
-  --vault-bg: #f6f3ec;
+  --vault-bg: #f8fafc;
   --vault-panel: #ffffff;
-  --vault-panel-raised: #f1ece0;
-  --vault-hairline: #e1dacb;
-  --vault-hairline-soft: #ece5d5;
-  --vault-paper: #221e14;
-  --vault-muted: #8a8370;
-  --vault-brass: #b8860b;
-  --vault-brass-bright: #d9a521;
-  --vault-ink-credit: #1e7a4c;
-  --vault-ink-debit: #c0392b;
-  --vault-branch-blue: #2a5fcc;
+  --vault-panel-raised: #eff6ff;
+  --vault-hairline: #dbeafe;
+  --vault-hairline-soft: #e8f0fe;
+  --vault-paper: #1e293b;
+  --vault-muted: #64748b;
+  --vault-brass: #2563eb;
+  --vault-brass-bright: #1d4ed8;
+  --vault-ink-credit: #16a34a;
+  --vault-ink-debit: #dc2626;
+  --vault-branch-blue: #2563eb;
+  --vault-brass-ink: #ffffff;
+  --vault-blue-ink: #ffffff;
+  --vault-brass-border: rgba(37, 99, 235, 0.35);
+  --vault-brass-tint: rgba(37, 99, 235, 0.12);
+  --vault-brass-faint: rgba(37, 99, 235, 0.05);
 }
 
 /* .root-vault applies the ledger palette as the page's own background —

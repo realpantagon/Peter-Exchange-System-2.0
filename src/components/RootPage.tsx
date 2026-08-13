@@ -43,6 +43,7 @@ export default function RootPage() {
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
     const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null) // Default to All (within range)
     const [rangeDays, setRangeDays] = useState<number>(30) // How far back to fetch/analyze
+    const [showAllTransactions, setShowAllTransactions] = useState(false) // "รายการทั้งหมด" is collapsed by default — rarely used vs /root/daily
 
     // Toast state
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -184,13 +185,13 @@ export default function RootPage() {
                 <div className="flex items-center gap-4">
                     <div
                         className="rounded-lg px-3 py-1.5 flex items-center"
-                        style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid rgba(184, 134, 11,0.35)' }}
+                        style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-brass-border)' }}
                     >
                         <img src="/Ex_logo_6.png" alt="Peter Exchange" className="h-7 w-auto" />
                     </div>
                     <span
                         className="hidden md:inline-block text-[11px] font-semibold uppercase tracking-[0.2em] px-2.5 py-1 rounded-full"
-                        style={{ color: 'var(--vault-brass)', border: '1px solid rgba(184, 134, 11,0.35)' }}
+                        style={{ color: 'var(--vault-brass)', border: '1px solid var(--vault-brass-border)' }}
                     >
                         Root Ledger
                     </span>
@@ -204,7 +205,7 @@ export default function RootPage() {
                                 key={b}
                                 to={`/system2025?branchid=${b}`}
                                 className="px-3.5 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-colors"
-                                style={{ backgroundColor: 'var(--vault-brass)', color: '#1a1305' }}
+                                style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}
                                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--vault-brass-bright)')}
                                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--vault-brass)')}
                             >
@@ -263,7 +264,7 @@ export default function RootPage() {
                                     <div className="flex items-center gap-2 mb-3">
                                         <span
                                             className="w-6 h-6 rounded-md text-xs font-bold flex items-center justify-center font-figure"
-                                            style={{ backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-brass)', border: '1px solid rgba(184, 134, 11,0.4)' }}
+                                            style={{ backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-brass)', border: '1px solid var(--vault-brass-border)' }}
                                         >
                                             {b}
                                         </span>
@@ -321,17 +322,63 @@ export default function RootPage() {
                 {/* Client Analytics Graph */}
                 <ClientTimeAnalytics transactions={filteredTransactions} />
 
-                {/* Transaction Table */}
-                <RootTransactionTable
-                    transactions={filteredTransactions}
-                    loading={loading}
-                    onRefresh={fetchTransactions}
-                    selectedDateFilter={selectedDateFilter}
-                    setSelectedDateFilter={setSelectedDateFilter}
-                    availableDates={availableDates} // 10 Days
-                    onEditTransaction={handleEditTransaction}
-                    onDeleteTransaction={handleDeleteTransaction}
-                />
+                {/* All transactions — collapsed by default. /root/daily already covers
+                    the common "look at one day" case with a friendlier layout, so this
+                    raw searchable table is here for the rarer full-history lookup. */}
+                <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>
+                    <div className="w-full flex items-center gap-3 px-5 sm:px-6 py-4">
+                        <button
+                            onClick={() => setShowAllTransactions(v => !v)}
+                            className="flex items-center gap-3 flex-1 min-w-0 text-left cursor-pointer"
+                        >
+                            <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-brass-border)' }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4.5 w-4.5" style={{ color: 'var(--vault-brass)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h10" />
+                                </svg>
+                            </span>
+                            <span className="flex-1 min-w-0">
+                                <span className="block font-display text-sm font-bold" style={{ color: 'var(--vault-paper)' }}>รายการธุรกรรมทั้งหมด</span>
+                                <span className="block text-xs mt-0.5" style={{ color: 'var(--vault-muted)' }}>
+                                    {filteredTransactions.length} รายการ · {showAllTransactions ? 'กำลังแสดงอยู่ — แตะเพื่อซ่อน' : 'แตะเพื่อค้นหา/ดูตารางแบบละเอียด'}
+                                </span>
+                            </span>
+                        </button>
+
+                        <Link
+                            to="/root/daily"
+                            className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors"
+                            style={{ color: 'var(--vault-brass)', border: '1px solid var(--vault-brass-border)' }}
+                        >
+                            ดูรายละเอียดรายวัน
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                        </Link>
+
+                        <button
+                            onClick={() => setShowAllTransactions(v => !v)}
+                            className="shrink-0 p-1"
+                            title={showAllTransactions ? 'ซ่อนตาราง' : 'แสดงตาราง'}
+                        >
+                            <svg className={`w-5 h-5 transition-transform ${showAllTransactions ? 'rotate-180' : ''}`} style={{ color: 'var(--vault-brass)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {showAllTransactions && (
+                        <div className="px-3 pb-3 sm:px-4 sm:pb-4 pt-1" style={{ borderTop: '1px solid var(--vault-hairline)', backgroundColor: 'var(--vault-bg)' }}>
+                            <RootTransactionTable
+                                transactions={filteredTransactions}
+                                loading={loading}
+                                onRefresh={fetchTransactions}
+                                selectedDateFilter={selectedDateFilter}
+                                setSelectedDateFilter={setSelectedDateFilter}
+                                availableDates={availableDates} // 10 Days
+                                onEditTransaction={handleEditTransaction}
+                                onDeleteTransaction={handleDeleteTransaction}
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Modals */}

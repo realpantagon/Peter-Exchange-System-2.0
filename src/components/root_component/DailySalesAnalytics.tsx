@@ -22,7 +22,7 @@ interface DailySalesAnalyticsProps {
 // Fixed colors for known branches — tuned bright enough to read on a dark vault surface
 const FIXED_BRANCH_COLORS: { [branch: string]: string } = {
     '4': '#4C8DFF',   // ร้าน 4 = น้ำเงิน
-    '11': '#CBA135',  // ร้าน 11 = ทองเหลือง
+    '11': '#F59E0B',  // ร้าน 11 = ส้มอำพัน (แยกจากสีธีมน้ำเงินของหน้า)
 }
 
 // Fallback palette for any other branches
@@ -40,8 +40,10 @@ const RANGE_OPTIONS = [
 
 type Granularity = 'day' | 'week' | 'month'
 
-const getGranularity = (rangeDays: number): Granularity => {
-    if (rangeDays <= 31) return 'day'
+// Sensible default bucket size for a given lookback window — the user can
+// always override this with the รายวัน/รายสัปดาห์/รายเดือน toggle below.
+const defaultGranularity = (rangeDays: number): Granularity => {
+    if (rangeDays <= 14) return 'day'
     if (rangeDays <= 120) return 'week'
     return 'month'
 }
@@ -51,6 +53,8 @@ const GRANULARITY_LABEL: { [k in Granularity]: string } = {
     week: 'รายสัปดาห์',
     month: 'รายเดือน',
 }
+
+const GRANULARITY_OPTIONS: Granularity[] = ['day', 'week', 'month']
 
 // Map a date to its bucket key + display label for the chosen granularity
 const bucketKeyAndLabel = (d: Date, g: Granularity): { key: string; label: string } => {
@@ -76,7 +80,10 @@ const formatTHB = (value: number) =>
     new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 }).format(value)
 
 export default function DailySalesAnalytics({ transactions, rangeDays, setRangeDays }: DailySalesAnalyticsProps) {
-    const granularity = getGranularity(rangeDays)
+    // Defaults to "รายสัปดาห์" (not "รายวัน") so the breakdown table below
+    // doesn't open on 30 rows of dates — the user can switch to a daily or
+    // monthly bucket any time via the toggle, independent of the lookback range.
+    const [granularity, setGranularity] = useState<Granularity>(() => defaultGranularity(rangeDays))
 
     // All branches present in data
     const branches = useMemo(
@@ -203,7 +210,7 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                         <button
                             onClick={() => setChartType('bar')}
                             className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-                            style={chartType === 'bar' ? { backgroundColor: 'var(--vault-brass)', color: '#1a1305' } : { color: 'var(--vault-muted)' }}
+                            style={chartType === 'bar' ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' } : { color: 'var(--vault-muted)' }}
                             title="กราฟแท่ง"
                         >
                             แท่ง
@@ -211,7 +218,7 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                         <button
                             onClick={() => setChartType('line')}
                             className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-                            style={chartType === 'line' ? { backgroundColor: 'var(--vault-brass)', color: '#1a1305' } : { color: 'var(--vault-muted)' }}
+                            style={chartType === 'line' ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' } : { color: 'var(--vault-muted)' }}
                             title="กราฟเส้น"
                         >
                             เส้น
@@ -233,20 +240,40 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                 </div>
             </div>
 
-            {/* Range selector */}
-            <div className="flex flex-wrap gap-2 mb-6">
-                {RANGE_OPTIONS.map(opt => (
-                    <button
-                        key={opt.days}
-                        onClick={() => setRangeDays(opt.days)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                        style={rangeDays === opt.days
-                            ? { backgroundColor: 'var(--vault-brass)', color: '#1a1305' }
-                            : { backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-muted)', border: '1px solid var(--vault-hairline)' }}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
+            {/* Range selector + bucket-size (granularity) toggle — two independent
+                controls: how far back to look, and how to group what's shown. */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold" style={{ color: 'var(--vault-muted)' }}>ช่วงเวลา:</span>
+                    {RANGE_OPTIONS.map(opt => (
+                        <button
+                            key={opt.days}
+                            onClick={() => setRangeDays(opt.days)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                            style={rangeDays === opt.days
+                                ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }
+                                : { backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-muted)', border: '1px solid var(--vault-hairline)' }}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold" style={{ color: 'var(--vault-muted)' }}>มุมมอง:</span>
+                    <div className="flex rounded-xl p-0.5" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)' }}>
+                        {GRANULARITY_OPTIONS.map(g => (
+                            <button
+                                key={g}
+                                onClick={() => setGranularity(g)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                                style={granularity === g ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' } : { color: 'var(--vault-muted)' }}
+                            >
+                                {GRANULARITY_LABEL[g]}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             {/* Today summary cards */}
@@ -261,7 +288,7 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                         <div className="text-[11px]" style={{ color: 'var(--vault-muted)' }}>ยอดขายวันนี้</div>
                     </div>
                 ))}
-                <div className="rounded-xl p-4 relative overflow-hidden" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid rgba(184, 134, 11,0.4)' }}>
+                <div className="rounded-xl p-4 relative overflow-hidden" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-brass-border)' }}>
                     <div className="absolute inset-x-0 top-0 h-0.5" style={{ backgroundColor: 'var(--vault-brass)' }} />
                     <div className="text-xs font-semibold mb-1" style={{ color: 'var(--vault-brass)' }}>รวมทุกร้าน ({currentRangeLabel})</div>
                     <div className="font-figure text-xl font-semibold" style={{ color: 'var(--vault-paper)' }}>฿ {formatTHB(grandTotal)}</div>
@@ -294,8 +321,8 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                             <Tooltip
                                 cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                                 formatter={(value, name) => [`฿ ${formatTHB(Number(value) || 0)}`, `ร้าน ${name}`]}
-                                contentStyle={{ borderRadius: '12px', border: '1px solid #E1DACB', backgroundColor: '#FFFFFF', color: '#221E14' }}
-                                labelStyle={{ color: '#8A8370' }}
+                                contentStyle={{ borderRadius: '12px', border: '1px solid var(--vault-hairline)', backgroundColor: 'var(--vault-panel)', color: 'var(--vault-paper)' }}
+                                labelStyle={{ color: 'var(--vault-muted)' }}
                             />
                             <Legend formatter={(value) => `ร้าน ${value}`} wrapperStyle={{ color: 'var(--vault-muted)', fontSize: 12 }} />
                             {visibleBranches.map(b => (
@@ -323,8 +350,8 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                             />
                             <Tooltip
                                 formatter={(value, name) => [`฿ ${formatTHB(Number(value) || 0)}`, name === 'รวม' ? 'รวมทุกร้าน' : `ร้าน ${name}`]}
-                                contentStyle={{ borderRadius: '12px', border: '1px solid #E1DACB', backgroundColor: '#FFFFFF', color: '#221E14' }}
-                                labelStyle={{ color: '#8A8370' }}
+                                contentStyle={{ borderRadius: '12px', border: '1px solid var(--vault-hairline)', backgroundColor: 'var(--vault-panel)', color: 'var(--vault-paper)' }}
+                                labelStyle={{ color: 'var(--vault-muted)' }}
                             />
                             <Legend formatter={(value) => (value === 'รวม' ? 'รวมทุกร้าน' : `ร้าน ${value}`)} wrapperStyle={{ color: 'var(--vault-muted)', fontSize: 12 }} />
                             {visibleBranches.map(b => (
@@ -344,9 +371,9 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                                 type="monotone"
                                 dataKey="__total"
                                 name="รวม"
-                                stroke="#CBA135"
+                                stroke="#1E293B"
                                 strokeWidth={2.5}
-                                dot={{ r: 3, fill: '#CBA135' }}
+                                dot={{ r: 3, fill: '#1E293B' }}
                                 activeDot={{ r: 5 }}
                             />
                         </LineChart>
@@ -378,7 +405,7 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                                 <Fragment key={rowKey}>
                                     <tr
                                         className="cursor-pointer transition-colors"
-                                        style={{ borderBottom: '1px solid var(--vault-hairline-soft)', backgroundColor: isOpen ? 'rgba(184, 134, 11,0.08)' : 'transparent' }}
+                                        style={{ borderBottom: '1px solid var(--vault-hairline-soft)', backgroundColor: isOpen ? 'var(--vault-brass-tint)' : 'transparent' }}
                                         onClick={() => setExpandedKey(isOpen ? null : rowKey)}
                                     >
                                         <td className="py-2 pr-4" style={{ color: 'var(--vault-paper)' }}>
@@ -389,7 +416,7 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                                                 {row.label}
                                             </span>
                                             {rowKey === todayKey && (
-                                                <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: 'var(--vault-brass)', color: '#1a1305' }}>วันนี้</span>
+                                                <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}>วันนี้</span>
                                             )}
                                         </td>
                                         {visibleBranches.map(b => (

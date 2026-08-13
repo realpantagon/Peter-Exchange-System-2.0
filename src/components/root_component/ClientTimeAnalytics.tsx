@@ -99,11 +99,11 @@ export default function ClientTimeAnalytics({ transactions }: ClientTimeAnalytic
                             cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                             contentStyle={{
                                 borderRadius: '12px',
-                                border: '1px solid #E1DACB',
-                                backgroundColor: '#FFFFFF',
-                                color: '#221E14'
+                                border: '1px solid var(--vault-hairline)',
+                                backgroundColor: 'var(--vault-panel)',
+                                color: 'var(--vault-paper)'
                             }}
-                            labelStyle={{ color: '#8A8370' }}
+                            labelStyle={{ color: 'var(--vault-muted)' }}
                             formatter={(value) => [`${value} รายการ`, 'ลูกค้า']}
                         />
                         <Bar
@@ -114,7 +114,7 @@ export default function ClientTimeAnalytics({ transactions }: ClientTimeAnalytic
                             {data.map((entry, index) => (
                                 <Cell
                                     key={`cell-${index}`}
-                                    fill={entry.clients > 0 ? `rgba(184, 134, 11, ${0.35 + (entry.clients / maxClients) * 0.65})` : 'var(--vault-hairline)'}
+                                    fill={entry.clients > 0 ? `rgba(37, 99, 235, ${0.35 + (entry.clients / maxClients) * 0.65})` : 'var(--vault-hairline)'}
                                 />
                             ))}
                         </Bar>
