@@ -86,8 +86,10 @@ export default function ClientTimeAnalytics({ transactions }: ClientTimeAnalytic
                             dataKey="time"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: 'var(--vault-muted)', fontSize: 12 }}
+                            tick={{ fill: 'var(--vault-muted)', fontSize: 11 }}
                             dy={10}
+                            interval="preserveStartEnd"
+                            minTickGap={12}
                         />
                         <YAxis
                             axisLine={false}

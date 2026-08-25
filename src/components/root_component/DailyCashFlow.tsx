@@ -292,7 +292,7 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
                     <span className="w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center font-figure" style={{ backgroundColor: 'var(--vault-bg)', color: 'var(--vault-brass)' }}>{branch}</span>
                     ร้าน {branch}
                 </span>
-                <span className="text-xs sm:text-sm flex items-center gap-3 font-figure">
+                <span className="text-xs sm:text-sm flex flex-wrap items-center gap-x-3 gap-y-1 font-figure">
                     <span style={{ color: 'var(--vault-ink-credit)' }}>รับ +฿ {formatTHB(flow.thbIn)}</span>
                     <span style={{ color: 'var(--vault-ink-debit)' }}>จ่าย −฿ {formatTHB(flow.thbOut)}</span>
                     <span className="font-bold" style={{ color: dayNet >= 0 ? 'var(--vault-ink-credit)' : 'var(--vault-ink-debit)' }}>

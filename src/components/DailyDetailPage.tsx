@@ -66,26 +66,26 @@ export default function DailyDetailPage() {
                 <h1 className="text-xl font-bold text-gray-800">รายละเอียดรายวัน</h1>
 
                 {/* Controls */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-wrap items-center justify-between gap-4">
-                    <div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+                    <div className="min-w-0">
                         <div className="text-sm text-gray-500">กำลังดูวันที่</div>
-                        <div className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <div className="text-base sm:text-lg font-bold text-gray-800 flex flex-wrap items-center gap-2">
                             {dateLabel}
-                            {isToday && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">วันนี้</span>}
+                            {isToday && <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold shrink-0">วันนี้</span>}
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                         <input
                             type="date"
                             value={selectedDate}
                             max={toISODate(new Date())}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="flex-1 min-w-[150px] sm:flex-none px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <select
                             value={branchFilter}
                             onChange={(e) => setBranchFilter(e.target.value)}
-                            className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="flex-1 min-w-[110px] sm:flex-none px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="">ทุกร้าน</option>
                             {branches.map(b => <option key={b} value={b}>ร้าน {b}</option>)}
