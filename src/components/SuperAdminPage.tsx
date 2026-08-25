@@ -41,6 +41,14 @@ const sortedCurrencies = (map: Map<string, CurrencySummary>) =>
 const formatCurrency = (amount: number) =>
     amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+// Branch header accent — a couple of branches get a distinct color to spot
+// them at a glance in the list; everything else stays the neutral white/gray.
+const branchAccent = (branchId: string) => {
+    if (branchId === '11') return { header: 'from-yellow-50 to-white', badge: 'bg-yellow-100 border-yellow-300 text-yellow-800' }
+    if (branchId === '4') return { header: 'from-blue-50 to-white', badge: 'bg-blue-100 border-blue-300 text-blue-800' }
+    return { header: 'from-gray-50 to-white', badge: 'bg-gray-100 border-gray-200 text-gray-700' }
+}
+
 // Pure aggregation — kept outside the component and driven by useMemo so it
 // only recomputes when the input transactions actually change (a version
 // that lived in useEffect + setState here recomputed `filteredTransactions`
@@ -116,6 +124,7 @@ export default function SuperAdminPage() {
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [loading, setLoading] = useState(true)
     // Date filtering
+    const [dateMode, setDateMode] = useState<'quick' | 'range'>('quick')
     const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(new Date().toDateString()) // Default to Today
     const [dateFrom, setDateFrom] = useState('')
     const [dateTo, setDateTo] = useState('')
@@ -154,15 +163,27 @@ export default function SuperAdminPage() {
         fetchTransactions()
     }, [])
 
-    const fetchTransactions = async () => {
+    // With no range, pulls the last 4 days (enough for the quick-date badges).
+    // With a range, queries Supabase directly for that window so history
+    // older than 4 days back is actually available, not just filtered away.
+    const fetchTransactions = async (range?: { from: string; to: string }) => {
         setLoading(true)
         try {
-            // Calculate date 3 days ago
-            const date = new Date()
-            date.setDate(date.getDate() - 3)
-            const startDate = date.toISOString().split('T')[0] // Format YYYY-MM-DD
+            let startDate: string
+            let endDate: string | undefined
 
-            const data = await getTransactions(startDate)
+            if (range) {
+                startDate = range.from
+                const end = new Date(range.to)
+                end.setDate(end.getDate() + 1)
+                endDate = end.toISOString().split('T')[0]
+            } else {
+                const date = new Date()
+                date.setDate(date.getDate() - 3)
+                startDate = date.toISOString().split('T')[0] // Format YYYY-MM-DD
+            }
+
+            const data = await getTransactions(startDate, undefined, endDate)
             setTransactions(data)
         } catch (error) {
             console.error("Failed to fetch transactions", error)
@@ -170,11 +191,32 @@ export default function SuperAdminPage() {
         setLoading(false)
     }
 
+    const applyDateRange = () => {
+        if (!dateFrom || !dateTo) return
+        fetchTransactions({ from: dateFrom, to: dateTo })
+    }
+
+    const switchToQuickMode = () => {
+        setDateMode('quick')
+        setSelectedDateFilter(new Date().toDateString())
+        fetchTransactions()
+    }
+
+    const switchToRangeMode = () => {
+        setDateMode('range')
+        setSelectedDateFilter(null)
+    }
+
+    const handleRefresh = () => {
+        if (dateMode === 'range' && dateFrom && dateTo) {
+            fetchTransactions({ from: dateFrom, to: dateTo })
+        } else {
+            fetchTransactions()
+        }
+    }
+
     const grandTotal = branchSummaries.reduce((sum, branch) => sum + branch.netTotalTHB, 0)
-    const totalBuyingTransactions = branchSummaries.reduce((sum, branch) => sum + branch.buyingCount, 0)
-    const totalSellingTransactions = branchSummaries.reduce((sum, branch) => sum + branch.sellingCount, 0)
     const totalBuyingAmount = branchSummaries.reduce((sum, branch) => sum + branch.buyingTotal, 0)
-    const totalSellingAmount = branchSummaries.reduce((sum, branch) => sum + branch.sellingTotal, 0)
 
     // Calculate overall currency summary across all branches
     const overallCurrencySummary = new Map<string, CurrencySummary>()
@@ -218,70 +260,87 @@ export default function SuperAdminPage() {
                 {/* Header */}
                 <div className="bg-white rounded-xl shadow-lg border-2 border-gray-200 p-4 md:p-6 mb-4 md:mb-6">
                     <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <span className="hidden sm:flex w-11 h-11 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 items-center justify-center shrink-0 shadow-sm">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                </svg>
-                            </span>
-                            <div>
-                                <h1 className="text-xl md:text-3xl font-bold text-gray-900">Super Admin Dashboard</h1>
-                                <p className="text-xs md:text-sm text-gray-500 mt-0.5">ภาพรวมทุกสาขา · All Branch Summary</p>
-                            </div>
+                        <div>
+                            <h1 className="text-xl md:text-3xl font-bold text-gray-900">Super Admin Dashboard</h1>
+                            <p className="text-xs md:text-sm text-gray-500 mt-0.5">ภาพรวมทุกสาขา · All Branch Summary</p>
                         </div>
                         <img src="Ex_logo_6.png" alt="App Icon" className="h-12 md:h-16" />
                     </div>
 
                     {/* Date Filter */}
                     <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
-                        {/* Date Filter Badges */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                            {availableDates.map((date) => {
-                                const dateStr = date.toDateString()
-                                const isSelected = selectedDateFilter === dateStr
-                                const isToday = new Date().toDateString() === dateStr
-                                const label = `${date.getDate()}/${date.getMonth() + 1}${isToday ? ' (Today)' : ''}`
-
-                                return (
-                                    <button
-                                        key={dateStr}
-                                        onClick={() => setSelectedDateFilter(isSelected ? null : dateStr)}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border transform active:scale-95 ${isSelected
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                                            }`}
-                                    >
-                                        {label}
-                                    </button>
-                                )
-                            })}
-
-                            {!selectedDateFilter && (
-                                <div className="flex items-center gap-2 md:gap-4 flex-wrap ml-2 pl-2 border-l border-gray-300">
-                                    <input
-                                        type="date"
-                                        value={dateFrom}
-                                        onChange={(e) => setDateFrom(e.target.value)}
-                                        className="px-2 md:px-3 py-1.5 md:py-2 border-2 border-gray-300 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer flex-1 min-w-[120px]"
-                                        placeholder="From Date"
-                                    />
-                                    <span className="text-gray-500 font-medium text-xs md:text-sm">to</span>
-                                    <input
-                                        type="date"
-                                        value={dateTo}
-                                        onChange={(e) => setDateTo(e.target.value)}
-                                        className="px-2 md:px-3 py-1.5 md:py-2 border-2 border-gray-300 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer flex-1 min-w-[120px]"
-                                        placeholder="To Date"
-                                    />
-                                </div>
-                            )}
+                        {/* Mode Switch: quick-pick days vs. custom range */}
+                        <div className="inline-flex items-center gap-0.5 p-1 bg-gray-100 rounded-full self-start shrink-0">
+                            <button
+                                onClick={switchToQuickMode}
+                                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${dateMode === 'quick' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                รายวัน
+                            </button>
+                            <button
+                                onClick={switchToRangeMode}
+                                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${dateMode === 'range' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                ช่วงวันที่
+                            </button>
                         </div>
 
+                        {dateMode === 'quick' ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {availableDates.map((date) => {
+                                    const dateStr = date.toDateString()
+                                    const isSelected = selectedDateFilter === dateStr
+                                    const isToday = new Date().toDateString() === dateStr
+                                    const label = `${date.getDate()}/${date.getMonth() + 1}${isToday ? ' (Today)' : ''}`
+
+                                    return (
+                                        <button
+                                            key={dateStr}
+                                            onClick={() => setSelectedDateFilter(isSelected ? null : dateStr)}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border transform active:scale-95 ${isSelected
+                                                ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                                                }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+                                <input
+                                    type="date"
+                                    value={dateFrom}
+                                    onChange={(e) => setDateFrom(e.target.value)}
+                                    className="px-2 md:px-3 py-1.5 md:py-2 border-2 border-gray-300 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer flex-1 min-w-[120px]"
+                                    placeholder="From Date"
+                                />
+                                <span className="text-gray-500 font-medium text-xs md:text-sm">ถึง</span>
+                                <input
+                                    type="date"
+                                    value={dateTo}
+                                    onChange={(e) => setDateTo(e.target.value)}
+                                    className="px-2 md:px-3 py-1.5 md:py-2 border-2 border-gray-300 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer flex-1 min-w-[120px]"
+                                    placeholder="To Date"
+                                />
+                                <button
+                                    onClick={applyDateRange}
+                                    disabled={!dateFrom || !dateTo}
+                                    className="px-3 md:px-4 py-1.5 md:py-2 rounded-lg bg-blue-600 text-white text-xs md:text-sm font-semibold shadow-sm hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-40 disabled:pointer-events-none"
+                                >
+                                    ค้นหา
+                                </button>
+                            </div>
+                        )}
+
                         <button
-                            onClick={fetchTransactions}
-                            className="md:ml-auto flex items-center justify-center gap-2 px-4 md:px-5 py-2 md:py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-md hover:shadow-lg font-medium text-xs md:text-sm"
+                            onClick={handleRefresh}
+                            className="group md:ml-auto inline-flex items-center justify-center gap-2 px-5 py-2 md:py-2.5 rounded-full bg-blue-600 text-white font-semibold text-xs md:text-sm shadow-md shadow-blue-600/25 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-600/30 active:scale-95 transition-all"
                         >
-                            <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3.5 h-3.5 md:w-4 md:h-4 transition-transform duration-500 group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                             Refresh
@@ -302,32 +361,16 @@ export default function SuperAdminPage() {
                 ) : (
                     <>
                         {/* Grand Total Cards */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
-                            <KpiCard
-                                label="Total Branches"
-                                value={branchSummaries.length.toString()}
-                                accent="blue"
-                                icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 21h18M5 21V7l7-4 7 4v14M9 9h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1" />}
-                            />
+                        <div className="grid grid-cols-2 gap-3 md:gap-4 mb-4 md:mb-6">
                             <KpiCard
                                 label="Buying Transactions"
-                                value={totalBuyingTransactions.toString()}
-                                sub={`฿${formatCurrency(totalBuyingAmount)}`}
+                                value={`฿${formatCurrency(totalBuyingAmount)}`}
                                 accent="green"
-                                icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v16m0 0l-5-5m5 5l5-5" />}
-                            />
-                            <KpiCard
-                                label="Selling Transactions"
-                                value={totalSellingTransactions.toString()}
-                                sub={`฿${formatCurrency(totalSellingAmount)}`}
-                                accent="orange"
-                                icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 20V4m0 0l-5 5m5-5l5 5" />}
                             />
                             <KpiCard
                                 label="Grand Total (THB)"
                                 value={`฿${formatCurrency(grandTotal)}`}
                                 accent="blue"
-                                icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />}
                             />
                         </div>
 
@@ -341,7 +384,6 @@ export default function SuperAdminPage() {
                                 </span>
                                 <div>
                                     <h2 className="text-lg md:text-2xl font-bold text-gray-900">สรุปทุกสาขา</h2>
-                                    <p className="text-xs md:text-sm text-gray-500 mt-0.5">Overall currency summary, aggregated across all branches</p>
                                 </div>
                             </div>
                             <CurrencyTable currencies={sortedCurrencies(overallCurrencySummary)} />
@@ -349,11 +391,13 @@ export default function SuperAdminPage() {
 
                         {/* Individual Branch Tables */}
                         <div className="space-y-4 md:space-y-6">
-                            {branchSummaries.map((branch) => (
+                            {branchSummaries.map((branch) => {
+                                const accent = branchAccent(branch.branchId)
+                                return (
                                 <div key={branch.branchId} className="bg-white rounded-xl shadow-lg border-2 border-gray-200">
-                                    <div className="p-4 md:p-6 border-b-2 border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                                    <div className={`p-4 md:p-6 border-b-2 border-gray-200 bg-gradient-to-r ${accent.header}`}>
                                         <div className="flex items-center gap-3">
-                                            <span className="w-9 h-9 rounded-lg bg-gray-100 border border-gray-200 text-gray-700 font-bold flex items-center justify-center shrink-0 text-sm">
+                                            <span className={`w-9 h-9 rounded-lg border font-bold flex items-center justify-center shrink-0 text-sm ${accent.badge}`}>
                                                 {branch.branchId}
                                             </span>
                                             <div className="flex-1 min-w-0">
@@ -370,7 +414,8 @@ export default function SuperAdminPage() {
 
                                     <CurrencyTable currencies={sortedCurrencies(branch.currencies)} />
                                 </div>
-                            ))}
+                                )
+                            })}
                         </div>
                     </>
                 )}
@@ -381,31 +426,22 @@ export default function SuperAdminPage() {
 
 // ---------------------------------------------------------------------------
 
-function KpiCard({ label, value, sub, accent, icon }: {
+function KpiCard({ label, value, accent }: {
     label: string
     value: string
-    sub?: string
     accent: 'blue' | 'green' | 'orange'
-    icon: React.ReactNode
 }) {
     const palette = {
-        blue: { border: 'border-blue-200', iconBg: 'bg-blue-100', iconText: 'text-blue-600', valueText: 'text-blue-700', labelText: 'text-blue-600' },
-        green: { border: 'border-green-200', iconBg: 'bg-green-100', iconText: 'text-green-600', valueText: 'text-green-700', labelText: 'text-green-600' },
-        orange: { border: 'border-orange-200', iconBg: 'bg-orange-100', iconText: 'text-orange-600', valueText: 'text-orange-700', labelText: 'text-orange-600' },
+        blue: { bar: 'bg-blue-500', border: 'border-blue-100', valueText: 'text-blue-700', labelText: 'text-blue-500' },
+        green: { bar: 'bg-green-500', border: 'border-green-100', valueText: 'text-green-700', labelText: 'text-green-500' },
+        orange: { bar: 'bg-orange-500', border: 'border-orange-100', valueText: 'text-orange-700', labelText: 'text-orange-500' },
     }[accent]
 
     return (
-        <div className={`bg-white rounded-lg shadow-md border-2 ${palette.border} p-3 md:p-4`}>
-            <div className="flex items-center gap-2 mb-1.5">
-                <span className={`w-7 h-7 rounded-md ${palette.iconBg} flex items-center justify-center shrink-0`}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${palette.iconText}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        {icon}
-                    </svg>
-                </span>
-                <div className={`text-xs font-semibold uppercase ${palette.labelText}`}>{label}</div>
-            </div>
-            <div className={`text-xl md:text-3xl font-bold font-figure ${palette.valueText}`}>{value}</div>
-            {sub && <div className={`text-xs md:text-sm mt-1 font-figure ${palette.labelText}`}>{sub}</div>}
+        <div className={`relative overflow-hidden bg-white rounded-lg border ${palette.border} shadow-sm p-3 md:p-5`}>
+            <span className={`absolute inset-y-0 left-0 w-1 ${palette.bar}`} />
+            <div className={`text-[11px] md:text-xs font-semibold uppercase tracking-wide ${palette.labelText}`}>{label}</div>
+            <div className={`mt-1 md:mt-1.5 text-xl md:text-3xl font-bold font-figure ${palette.valueText}`}>{value}</div>
         </div>
     )
 }
@@ -431,61 +467,91 @@ function StatPill({ label, value, tone }: { label: string; value: string; tone: 
 // columns scannable, and only the THB figure (the number that matters) is
 // bold/colored; the raw foreign-currency amount stays muted secondary info.
 function CurrencyTable({ currencies }: { currencies: CurrencySummary[] }) {
+    // On mobile, ซื้อ/ขาย are hidden by default (สุทธิ is what matters at a
+    // glance) and revealed on demand; md+ always shows every column.
+    const [showDetail, setShowDetail] = useState(false)
+
     if (currencies.length === 0) {
         return <div className="px-6 py-10 text-center text-sm text-gray-400">ไม่มีข้อมูลสกุลเงิน</div>
     }
 
+    const detailCls = showDetail ? '' : 'hidden md:table-cell'
+
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-xs md:text-sm">
-                <thead>
-                    <tr className="bg-gray-50">
-                        <th rowSpan={2} className="px-3 md:px-5 py-2.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 align-bottom">
-                            สกุลเงิน
-                        </th>
-                        <th colSpan={2} className="px-3 md:px-5 py-2 text-center text-xs font-bold text-green-700 uppercase tracking-wider border-b border-l border-gray-200 bg-green-50/70">
-                            ซื้อ
-                        </th>
-                        <th colSpan={2} className="px-3 md:px-5 py-2 text-center text-xs font-bold text-orange-700 uppercase tracking-wider border-b border-l border-gray-200 bg-orange-50/70">
-                            ขาย
-                        </th>
-                        <th colSpan={2} className="px-3 md:px-5 py-2 text-center text-xs font-bold text-blue-700 uppercase tracking-wider border-b border-l border-gray-200 bg-blue-50/70">
-                            สุทธิ
-                        </th>
-                    </tr>
-                    <tr className="bg-gray-50">
-                        <th className="px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-gray-400 border-b border-l border-gray-200">จำนวน</th>
-                        <th className="px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-green-700 border-b border-gray-200">THB</th>
-                        <th className="px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-gray-400 border-b border-l border-gray-200">จำนวน</th>
-                        <th className="px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-orange-700 border-b border-gray-200">THB</th>
-                        <th className="px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-gray-400 border-b border-l border-gray-200">จำนวน</th>
-                        <th className="px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-blue-700 border-b border-gray-200">THB</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                    {currencies.map((curr) => (
-                        <tr key={curr.currency} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-3 md:px-5 py-2.5 md:py-3 whitespace-nowrap">
-                                <span className="inline-flex items-center gap-2">
-                                    <img
-                                        src={getFlagIcon(curr.currency)}
-                                        alt={`${curr.currency} flag`}
-                                        className="w-5 h-5 md:w-6 md:h-6 rounded-full border border-gray-100 object-cover shrink-0"
-                                        onError={(e) => { e.currentTarget.src = '/vite.svg' }}
-                                    />
-                                    <span className="font-bold text-gray-900">{curr.currency}</span>
-                                </span>
-                            </td>
-                            <td className="px-3 md:px-5 py-2.5 md:py-3 text-right font-figure text-gray-400 border-l border-gray-100">{formatCurrency(curr.buyingAmount)}</td>
-                            <td className="px-3 md:px-5 py-2.5 md:py-3 text-right font-figure font-bold text-green-700">฿{formatCurrency(curr.buyingTotalTHB)}</td>
-                            <td className="px-3 md:px-5 py-2.5 md:py-3 text-right font-figure text-gray-400 border-l border-gray-100">{formatCurrency(curr.sellingAmount)}</td>
-                            <td className="px-3 md:px-5 py-2.5 md:py-3 text-right font-figure font-bold text-orange-700">฿{formatCurrency(curr.sellingTotalTHB)}</td>
-                            <td className="px-3 md:px-5 py-2.5 md:py-3 text-right font-figure text-gray-400 border-l border-gray-100">{formatCurrency(curr.netAmount)}</td>
-                            <td className="px-3 md:px-5 py-2.5 md:py-3 text-right font-figure font-bold text-blue-700">฿{formatCurrency(curr.netTotalTHB)}</td>
+        <div className="relative">
+            <div className="md:hidden flex items-center justify-between gap-2 px-3 pt-2">
+                <button
+                    onClick={() => setShowDetail(v => !v)}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full active:scale-95 transition-transform"
+                >
+                    {showDetail ? 'ซ่อน ซื้อ/ขาย' : 'แสดง ซื้อ/ขาย'}
+                    <svg className={`w-3 h-3 transition-transform ${showDetail ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                {showDetail && (
+                    <span className="flex items-center gap-1 text-[11px] text-gray-400 shrink-0">
+                        เลื่อนดู
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                        </svg>
+                    </span>
+                )}
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-xs md:text-sm">
+                    <thead>
+                        <tr className="bg-gray-50">
+                            <th rowSpan={2} className="sticky left-0 z-20 bg-gray-50 px-3 md:px-5 py-2.5 text-left text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-r border-gray-200 align-bottom">
+                                สกุลเงิน
+                            </th>
+                            <th colSpan={2} className={`${detailCls} px-3 md:px-5 py-2 text-center text-xs font-bold text-green-700 uppercase tracking-wider border-b border-l border-gray-200 bg-green-50/70`}>
+                                ซื้อ
+                            </th>
+                            <th colSpan={2} className={`${detailCls} px-3 md:px-5 py-2 text-center text-xs font-bold text-orange-700 uppercase tracking-wider border-b border-l border-gray-200 bg-orange-50/70`}>
+                                ขาย
+                            </th>
+                            <th colSpan={2} className="px-3 md:px-5 py-2 text-center text-xs font-bold text-blue-700 uppercase tracking-wider border-b border-l border-gray-200 bg-blue-50/70">
+                                สุทธิ
+                            </th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                        <tr className="bg-gray-50">
+                            <th className={`${detailCls} px-3 md:px-5 py-2 text-right text-[11px] font-bold text-green-700/70 border-b border-l border-gray-200`}>จำนวน</th>
+                            <th className={`${detailCls} px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-green-700 border-b border-gray-200`}>THB</th>
+                            <th className={`${detailCls} px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-gray-500 border-b border-l border-gray-200`}>จำนวน</th>
+                            <th className={`${detailCls} px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-orange-700 border-b border-gray-200`}>THB</th>
+                            <th className="px-3 md:px-5 py-2 text-right text-[11px] font-bold text-blue-700/70 border-b border-l border-gray-200">จำนวน</th>
+                            <th className="px-3 md:px-5 py-2 text-right text-[11px] font-semibold text-blue-700 border-b border-gray-200">THB</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {currencies.map((curr) => (
+                            <tr key={curr.currency} className="group hover:bg-gray-50 transition-colors">
+                                <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 transition-colors px-3 md:px-5 py-2.5 md:py-3 whitespace-nowrap border-r border-gray-100">
+                                    <span className="inline-flex items-center gap-2">
+                                        <img
+                                            src={getFlagIcon(curr.currency)}
+                                            alt={`${curr.currency} flag`}
+                                            className="w-5 h-5 md:w-6 md:h-6 rounded-full border border-gray-100 object-cover shrink-0"
+                                            onError={(e) => { e.currentTarget.src = '/vite.svg' }}
+                                        />
+                                        <span className="font-bold text-gray-900">{curr.currency}</span>
+                                    </span>
+                                </td>
+                                <td className={`${detailCls} px-3 md:px-5 py-2.5 md:py-3 text-right font-figure font-bold text-gray-800 border-l border-gray-100`}>{formatCurrency(curr.buyingAmount)}</td>
+                                <td className={`${detailCls} px-3 md:px-5 py-2.5 md:py-3 text-right font-figure font-bold text-green-700`}>฿{formatCurrency(curr.buyingTotalTHB)}</td>
+                                <td className={`${detailCls} px-3 md:px-5 py-2.5 md:py-3 text-right font-figure text-gray-600 border-l border-gray-100`}>{formatCurrency(curr.sellingAmount)}</td>
+                                <td className={`${detailCls} px-3 md:px-5 py-2.5 md:py-3 text-right font-figure font-bold text-orange-700`}>฿{formatCurrency(curr.sellingTotalTHB)}</td>
+                                <td className="px-3 md:px-5 py-2.5 md:py-3 text-right font-figure font-bold text-gray-800 border-l border-gray-100">{formatCurrency(curr.netAmount)}</td>
+                                <td className="px-3 md:px-5 py-2.5 md:py-3 text-right font-figure font-bold text-blue-700">฿{formatCurrency(curr.netTotalTHB)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            {showDetail && (
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-white to-transparent md:hidden" />
+            )}
         </div>
     )
 }
