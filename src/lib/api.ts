@@ -1,29 +1,152 @@
-import { supabase } from './supabase'
 import type { PeterExchangeRate, PeterExchangeTransaction, PeterExchangeBalanceLog, BalanceLogKind } from '../types/database'
+
+// Talks to the Cloudflare Worker API (worker/src/index.js), which is served
+// from the same origin as this app in production and proxied by Vite in dev
+// (see vite.config.ts) — so the base path is always just '/api'.
+//
+// D1 uses snake_case columns and real numbers; the rest of the app still speaks
+// the original Supabase-era shapes from ../types/database. The row mappers
+// below are the only place that translation happens, which keeps the schema
+// clean without a rename rippling through every component.
+
+const API_BASE = '/api'
+const API_KEY = import.meta.env.VITE_API_KEY
+
+if (!API_KEY) {
+    console.warn('Missing VITE_API_KEY. Please check your .env file.')
+}
+
+type Query = Record<string, string | undefined>
+
+async function request<T>(path: string, init?: RequestInit & { query?: Query }): Promise<T> {
+    const { query, ...rest } = init ?? {}
+
+    const url = new URL(`${API_BASE}${path}`, window.location.origin)
+    for (const [key, value] of Object.entries(query ?? {})) {
+        if (value !== undefined && value !== '') url.searchParams.set(key, value)
+    }
+
+    const response = await fetch(url, {
+        ...rest,
+        headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': API_KEY,
+            ...rest.headers,
+        },
+    })
+
+    if (!response.ok) {
+        const detail = await response.json().catch(() => null)
+        throw new Error(detail?.error || `${rest.method || 'GET'} ${path} failed (${response.status})`)
+    }
+
+    return response.status === 204 ? (undefined as T) : response.json()
+}
+
+// --- Row mapping -------------------------------------------------------------
+
+// D1 returns numbers where Supabase returned strings; the components format
+// these with parseFloat/Number, so hand them strings as before.
+const str = (v: number | string | null): string | null => (v === null || v === undefined ? null : String(v))
+const num = (v: string | null | undefined): number | null => {
+    if (v === null || v === undefined || v === '') return null
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+}
+
+type RateRow = { id: number; currency_code: string; currency_name: string; rate: number }
+
+const toRate = (r: RateRow): PeterExchangeRate => ({
+    id: r.id,
+    Currency: r.currency_name,
+    Cur: r.currency_code,
+    Rate: str(r.rate),
+})
+
+type TransactionRow = {
+    id: number
+    created_at: string
+    currency_code: string | null
+    currency_name: string | null
+    rate: number | null
+    amount: number | null
+    total_thb: number | null
+    branch: string | null
+    txn_type: string | null
+    customer_passport_no: string | null
+    customer_nationality: string | null
+    customer_name: string | null
+}
+
+const toTransaction = (r: TransactionRow): PeterExchangeTransaction => ({
+    id: r.id,
+    created_at: r.created_at,
+    Currency: r.currency_name,
+    Rate: str(r.rate),
+    Amount: str(r.amount),
+    Total_TH: str(r.total_thb),
+    Branch: r.branch,
+    Transaction_Type: r.txn_type,
+    Cur: r.currency_code,
+    Customer_Passport_no: r.customer_passport_no,
+    Customer_Nationality: r.customer_nationality,
+    Customer_Name: r.customer_name,
+})
+
+// Only sends the fields actually present, so a partial update stays partial.
+const fromTransaction = (t: Partial<PeterExchangeTransaction>): Record<string, unknown> => {
+    const body: Record<string, unknown> = {}
+    if ('Currency' in t) body.currency_name = t.Currency ?? null
+    if ('Cur' in t) body.currency_code = t.Cur ?? null
+    if ('Rate' in t) body.rate = num(t.Rate)
+    if ('Amount' in t) body.amount = num(t.Amount)
+    if ('Total_TH' in t) body.total_thb = num(t.Total_TH)
+    if ('Branch' in t) body.branch = t.Branch ?? null
+    if ('Transaction_Type' in t) body.txn_type = t.Transaction_Type ?? null
+    if ('Customer_Passport_no' in t) body.customer_passport_no = t.Customer_Passport_no ?? null
+    if ('Customer_Nationality' in t) body.customer_nationality = t.Customer_Nationality ?? null
+    if ('Customer_Name' in t) body.customer_name = t.Customer_Name ?? null
+    return body
+}
+
+type BalanceLogRow = {
+    id: number
+    created_at: string
+    log_date: string
+    branch: string
+    kind: BalanceLogKind
+    amount: number
+    system_snapshot: number | null
+    note: string | null
+}
+
+const toBalanceLog = (r: BalanceLogRow): PeterExchangeBalanceLog => ({
+    id: r.id,
+    created_at: r.created_at,
+    Date: r.log_date,
+    Branch: r.branch,
+    Kind: r.kind,
+    Amount: r.amount,
+    System_Snapshot: r.system_snapshot,
+    Note: r.note,
+})
 
 // --- Rate Services ---
 
 export const getRates = async (): Promise<PeterExchangeRate[]> => {
-    const { data, error } = await supabase
-        .from('Peter_Exchange_Rate')
-        .select('*')
-        .order('id', { ascending: true })
-
-    if (error) {
+    try {
+        const rows = await request<RateRow[]>('/rates')
+        return rows.map(toRate)
+    } catch (error) {
         console.error('Error fetching rates:', error)
         throw error
     }
-
-    return data || []
 }
 
 export const updateRate = async (id: number, rate: string): Promise<void> => {
-    const { error } = await supabase
-        .from('Peter_Exchange_Rate')
-        .update({ Rate: rate })
-        .eq('id', id)
-
-    if (error) {
+    try {
+        await request(`/rates/${id}`, { method: 'PATCH', body: JSON.stringify({ rate: Number(rate) }) })
+    } catch (error) {
         console.error('Error updating rate:', error)
         throw error
     }
@@ -32,71 +155,47 @@ export const updateRate = async (id: number, rate: string): Promise<void> => {
 // --- Transaction Services ---
 
 export const getTransactions = async (startDate?: string, branchId?: string, endDate?: string): Promise<PeterExchangeTransaction[]> => {
-    let query = supabase
-        .from('Peter_Exchange_Transaction')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-    if (startDate) {
-        query = query.gte('created_at', startDate)
-    }
-
-    if (endDate) {
-        query = query.lte('created_at', endDate)
-    }
-
-    if (branchId) {
-        query = query.eq('Branch', branchId)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
+    try {
+        const rows = await request<TransactionRow[]>('/transactions', {
+            query: { from: startDate, to: endDate, branch: branchId },
+        })
+        return rows.map(toTransaction)
+    } catch (error) {
         console.error('Error fetching transactions:', error)
         throw error
     }
-
-    return data || []
 }
 
 export const createTransaction = async (transaction: Omit<PeterExchangeTransaction, 'id' | 'created_at'>): Promise<PeterExchangeTransaction> => {
-    const { data, error } = await supabase
-        .from('Peter_Exchange_Transaction')
-        .insert([transaction])
-        .select()
-        .single()
-
-    if (error) {
+    try {
+        const row = await request<TransactionRow>('/transactions', {
+            method: 'POST',
+            body: JSON.stringify(fromTransaction(transaction)),
+        })
+        return toTransaction(row)
+    } catch (error) {
         console.error('Error creating transaction:', error)
         throw error
     }
-
-    return data
 }
 
 export const updateTransaction = async (id: number, transaction: Partial<PeterExchangeTransaction>): Promise<PeterExchangeTransaction> => {
-    const { data, error } = await supabase
-        .from('Peter_Exchange_Transaction')
-        .update(transaction)
-        .eq('id', id)
-        .select()
-        .single()
-
-    if (error) {
+    try {
+        const row = await request<TransactionRow>(`/transactions/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(fromTransaction(transaction)),
+        })
+        return toTransaction(row)
+    } catch (error) {
         console.error('Error updating transaction:', error)
         throw error
     }
-
-    return data
 }
 
 export const deleteTransaction = async (id: number): Promise<void> => {
-    const { error } = await supabase
-        .from('Peter_Exchange_Transaction')
-        .delete()
-        .eq('id', id)
-
-    if (error) {
+    try {
+        await request(`/transactions/${id}`, { method: 'DELETE' })
+    } catch (error) {
         console.error('Error deleting transaction:', error)
         throw error
     }
@@ -105,36 +204,19 @@ export const deleteTransaction = async (id: number): Promise<void> => {
 // --- Daily Cash Balance Log (Cash Flow) Services ---
 // Append-only log: staff add opening/closing entries throughout the day, each locked
 // once saved. Only root (root pages) edits/deletes — enforced in the UI.
-// Backing table: supabase/migrations/0004_balance_log.sql. Reads degrade gracefully
-// (return []) until the table exists.
-
-const BALANCE_LOG_TABLE = 'Peter_Exchange_Balance_Log'
+// Backing table: cash_balance_log (migrations/0001_init.sql).
 
 // Fetch balance-log entries. Optionally filter by date ('YYYY-MM-DD') and/or branch.
 // Ordered oldest→newest so the timeline reads top-to-bottom by time.
 export const getBalanceLogs = async (date?: string, branchId?: string): Promise<PeterExchangeBalanceLog[]> => {
-    let query = supabase
-        .from(BALANCE_LOG_TABLE)
-        .select('*')
-        .order('created_at', { ascending: true })
-
-    if (date) {
-        query = query.eq('Date', date)
-    }
-
-    if (branchId) {
-        query = query.eq('Branch', branchId)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-        // Table likely not created yet — degrade gracefully instead of crashing the page.
-        console.warn(`[getBalanceLogs] "${BALANCE_LOG_TABLE}" not ready yet:`, error.message)
+    try {
+        const rows = await request<BalanceLogRow[]>('/balance-logs', { query: { date, branch: branchId } })
+        return rows.map(toBalanceLog)
+    } catch (error) {
+        // Don't crash the cash-flow page if the log can't be read.
+        console.warn('[getBalanceLogs] could not load balance log:', error)
         return []
     }
-
-    return data || []
 }
 
 // Append a new (locked) balance-log entry.
@@ -146,18 +228,23 @@ export const createBalanceLog = async (record: {
     System_Snapshot?: number | null
     Note?: string | null
 }): Promise<PeterExchangeBalanceLog> => {
-    const { data, error } = await supabase
-        .from(BALANCE_LOG_TABLE)
-        .insert(record)
-        .select()
-        .single()
-
-    if (error) {
+    try {
+        const row = await request<BalanceLogRow>('/balance-logs', {
+            method: 'POST',
+            body: JSON.stringify({
+                log_date: record.Date,
+                branch: record.Branch,
+                kind: record.Kind,
+                amount: record.Amount,
+                system_snapshot: record.System_Snapshot ?? null,
+                note: record.Note ?? null,
+            }),
+        })
+        return toBalanceLog(row)
+    } catch (error) {
         console.error('Error creating balance log:', error)
         throw error
     }
-
-    return data
 }
 
 // Root-only: edit an existing entry's amount / note.
@@ -165,12 +252,13 @@ export const updateBalanceLog = async (
     id: number,
     patch: { Amount?: number; Note?: string | null }
 ): Promise<void> => {
-    const { error } = await supabase
-        .from(BALANCE_LOG_TABLE)
-        .update(patch)
-        .eq('id', id)
+    try {
+        const body: Record<string, unknown> = {}
+        if ('Amount' in patch) body.amount = patch.Amount
+        if ('Note' in patch) body.note = patch.Note ?? null
 
-    if (error) {
+        await request(`/balance-logs/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+    } catch (error) {
         console.error('Error updating balance log:', error)
         throw error
     }
@@ -178,12 +266,9 @@ export const updateBalanceLog = async (
 
 // Root-only: delete an entry.
 export const deleteBalanceLog = async (id: number): Promise<void> => {
-    const { error } = await supabase
-        .from(BALANCE_LOG_TABLE)
-        .delete()
-        .eq('id', id)
-
-    if (error) {
+    try {
+        await request(`/balance-logs/${id}`, { method: 'DELETE' })
+    } catch (error) {
         console.error('Error deleting balance log:', error)
         throw error
     }

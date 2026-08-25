@@ -26,3 +26,6 @@ dist-ssr
 # Env
 .dev.vars
 .env
+
+# Wrangler build/dev artifacts
+.wrangler

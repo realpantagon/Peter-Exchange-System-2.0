@@ -1,0 +1,184 @@
+// One-off import of the Supabase CSV export into D1.
+//
+//   node import-supabase-csv.mjs [--dir <csv-dir>] [--out <sql-file>] [--execute]
+//
+// Without --execute it only writes the .sql file so you can inspect it first.
+// With --execute it also runs:
+//   wrangler d1 execute peter-exchange --remote --file=<sql-file>
+//
+// Original ids are preserved — the app addresses rows by id when editing and
+// deleting, and it makes the row-count check after import meaningful.
+
+import { writeFileSync, readFileSync, mkdirSync } from 'fs';
+import { execSync } from 'child_process';
+import { dirname, join } from 'path';
+
+const DEFAULT_CSV_DIR = 'E:/Family Project/Migration-2026-08-2026';
+const DEFAULT_OUT = join(process.env.TEMP || '/tmp', 'peter_exchange_import.sql');
+const ACCOUNT_ID = 'b76e4b50bfd52760bbbfec7ff7fc89c0';
+const ROWS_PER_INSERT = 500;
+
+const args = process.argv.slice(2);
+const flag = (name, fallback) => {
+  const i = args.indexOf(name);
+  return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
+};
+const CSV_DIR = flag('--dir', DEFAULT_CSV_DIR);
+const OUT_FILE = flag('--out', DEFAULT_OUT);
+const EXECUTE = args.includes('--execute');
+
+// --- CSV parsing -------------------------------------------------------------
+// RFC 4180: fields may be quoted and contain commas, newlines and "" escapes.
+// Four transaction rows do have commas inside quoted customer names, so a
+// naive split(',') would silently shift every column after them.
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else quoted = false;
+      } else field += ch;
+      continue;
+    }
+
+    if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\r') { /* handled by the \n that follows */ }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else field += ch;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+
+  const header = rows.shift();
+  return rows
+    .filter((r) => r.some((v) => v !== ''))
+    .map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ''])));
+}
+
+// --- value coercion ----------------------------------------------------------
+const sqlText = (v) => {
+  const s = (v ?? '').trim();
+  return s === '' ? 'NULL' : `'${s.replace(/'/g, "''")}'`;
+};
+
+const sqlNum = (v) => {
+  const s = (v ?? '').trim().replace(/,/g, '');
+  if (s === '') return 'NULL';
+  const n = Number(s);
+  if (!Number.isFinite(n)) throw new Error(`Not a number: ${JSON.stringify(v)}`);
+  return String(n);
+};
+
+// Postgres '2026-08-25 04:57:24.11856+00' -> ISO '2026-08-25T04:57:24.118Z'.
+// Sub-millisecond digits are dropped; Date can't represent them anyway.
+const sqlTimestamp = (v) => {
+  const s = (v ?? '').trim();
+  if (s === '') return 'NULL';
+  const d = new Date(s.replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00'));
+  if (Number.isNaN(d.getTime())) throw new Error(`Bad timestamp: ${JSON.stringify(v)}`);
+  return `'${d.toISOString()}'`;
+};
+
+// --- table definitions -------------------------------------------------------
+// Each maps one exported CSV onto its new D1 table.
+const TABLES = [
+  {
+    file: 'Peter_Exchange_Rate_rows.csv',
+    table: 'board_rates',
+    columns: ['id', 'currency_code', 'currency_name', 'rate'],
+    row: (r) => [sqlNum(r.id), sqlText(r.Cur), sqlText(r.Currency), sqlNum(r.Rate)],
+  },
+  {
+    file: 'Peter_Exchange_Transaction_rows.csv',
+    table: 'transactions',
+    columns: [
+      'id', 'created_at', 'currency_code', 'currency_name', 'rate', 'amount',
+      'total_thb', 'branch', 'txn_type', 'customer_passport_no',
+      'customer_nationality', 'customer_name',
+    ],
+    row: (r) => [
+      sqlNum(r.id),
+      sqlTimestamp(r.created_at),
+      sqlText(r.Cur),
+      sqlText(r.Currency),
+      sqlNum(r.Rate),
+      sqlNum(r.Amount),
+      sqlNum(r.Total_TH),
+      sqlText(r.Branch),
+      sqlText(r.Transaction_Type),
+      sqlText(r.Customer_Passport_no),
+      sqlText(r.Customer_Nationality),
+      sqlText(r.Customer_Name),
+    ],
+  },
+  {
+    file: 'Peter_Exchange_Balance_Log_rows.csv',
+    table: 'cash_balance_log',
+    columns: ['id', 'created_at', 'log_date', 'branch', 'kind', 'amount', 'system_snapshot', 'note'],
+    row: (r) => [
+      sqlNum(r.id),
+      sqlTimestamp(r.created_at),
+      sqlText(r.Date),
+      sqlText(r.Branch),
+      sqlText(r.Kind),
+      sqlNum(r.Amount),
+      sqlNum(r.System_Snapshot),
+      sqlText(r.Note),
+    ],
+  },
+  // Peter_Exchange_Daily_Balance is intentionally not imported: the app stopped
+  // using it when the append-only balance log replaced it, and the export holds
+  // a single row.
+];
+
+// --- build -------------------------------------------------------------------
+const out = ['-- Generated by worker/import-supabase-csv.mjs — do not edit by hand.', ''];
+const summary = [];
+
+for (const def of TABLES) {
+  const rows = parseCsv(readFileSync(join(CSV_DIR, def.file), 'utf8'));
+  const values = rows.map((r, i) => {
+    try {
+      return `(${def.row(r).join(', ')})`;
+    } catch (e) {
+      throw new Error(`${def.file} row ${i + 2}: ${e.message}`);
+    }
+  });
+
+  out.push(`-- ${def.table}: ${values.length} rows from ${def.file}`);
+  out.push(`DELETE FROM ${def.table};`);
+  for (let i = 0; i < values.length; i += ROWS_PER_INSERT) {
+    const chunk = values.slice(i, i + ROWS_PER_INSERT);
+    out.push(`INSERT INTO ${def.table} (${def.columns.join(', ')}) VALUES\n${chunk.join(',\n')};`);
+  }
+  out.push('');
+
+  // Checksum the money column so the import can be verified against the source.
+  const totalKey = def.table === 'transactions' ? 'Total_TH' : def.table === 'cash_balance_log' ? 'Amount' : 'Rate';
+  const total = rows.reduce((s, r) => s + (Number(String(r[totalKey] ?? '').replace(/,/g, '')) || 0), 0);
+  summary.push({ table: def.table, rows: values.length, [`sum(${totalKey})`]: Number(total.toFixed(2)) });
+}
+
+mkdirSync(dirname(OUT_FILE), { recursive: true });
+writeFileSync(OUT_FILE, out.join('\n'), 'utf8');
+
+console.table(summary);
+console.log(`\nWrote ${OUT_FILE}`);
+
+if (!EXECUTE) {
+  console.log('Dry run — re-run with --execute to apply it to the remote database.');
+  process.exit(0);
+}
+
+console.log('\nExecuting against remote D1...');
+execSync(
+  `npx wrangler d1 execute peter-exchange --remote --file="${OUT_FILE}" --yes`,
+  { stdio: 'inherit', cwd: dirname(new URL(import.meta.url).pathname.slice(1)), env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID } }
+);

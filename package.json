@@ -5,13 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:worker": "wrangler dev --config worker/wrangler.toml",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:worker": "pnpm build && wrangler deploy --config worker/wrangler.toml",
+    "db:apply": "wrangler d1 migrations apply peter-exchange --remote --config worker/wrangler.toml --env-file worker/wrangler.env",
+    "db:console": "wrangler d1 execute peter-exchange --remote --config worker/wrangler.toml --env-file worker/wrangler.env --command",
+    "secret:api-key": "wrangler secret put API_KEY --config worker/wrangler.toml"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.7.3",
-    "@supabase/supabase-js": "^2.58.0",
     "@tailwindcss/vite": "^4.1.13",
     "hono": "^4.9.9",
     "html2canvas": "^1.4.1",
@@ -35,11 +39,11 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "express": "^5.2.1",
     "globals": "^16.4.0",
-    "supabase": "^2.47.2",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.44.0",
     "usb": "^2.17.0",
     "vite": "^7.1.7",
-    "vite-plugin-pwa": "^1.0.3"
+    "vite-plugin-pwa": "^1.0.3",
+    "wrangler": "^4.125.0"
   }
 }
