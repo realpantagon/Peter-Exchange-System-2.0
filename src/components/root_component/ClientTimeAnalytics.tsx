@@ -51,15 +51,24 @@ export default function ClientTimeAnalytics({ transactions }: ClientTimeAnalytic
 
     // Find max value to scaling opacity or color if needed
     const maxClients = Math.max(...data.map(d => d.clients), 1)
+    const busiestHour = data.reduce((best, d) => (d.clients > best.clients ? d : best), data[0])
 
     return (
-        <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-100/50 p-6 mb-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Client Traffic Analytics (09:00 - 21:00)
-            </h3>
+        <div className="root-vault rounded-2xl p-5 sm:p-6" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+                <h3 className="font-display text-base sm:text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--vault-paper)' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--vault-brass)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    ช่วงเวลาที่ลูกค้าเข้าใช้บริการ
+                    <span className="text-xs font-normal" style={{ color: 'var(--vault-muted)' }}>· 09:00–21:00</span>
+                </h3>
+                {maxClients > 0 && (
+                    <span className="font-figure text-xs" style={{ color: 'var(--vault-muted)' }}>
+                        ช่วงพีค <span style={{ color: 'var(--vault-brass)' }} className="font-semibold">{busiestHour.time} น.</span> · {busiestHour.clients} รายการ
+                    </span>
+                )}
+            </div>
 
             <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -67,32 +76,35 @@ export default function ClientTimeAnalytics({ transactions }: ClientTimeAnalytic
                         data={data}
                         margin={{
                             top: 5,
-                            right: 30,
-                            left: 20,
+                            right: 20,
+                            left: 10,
                             bottom: 5,
                         }}
                     >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--vault-hairline)" />
                         <XAxis
                             dataKey="time"
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#6B7280', fontSize: 12 }}
+                            tick={{ fill: 'var(--vault-muted)', fontSize: 12 }}
                             dy={10}
                         />
                         <YAxis
                             axisLine={false}
                             tickLine={false}
-                            tick={{ fill: '#6B7280', fontSize: 12 }}
+                            tick={{ fill: 'var(--vault-muted)', fontSize: 12 }}
                             allowDecimals={false}
                         />
                         <Tooltip
-                            cursor={{ fill: '#F3F4F6' }}
+                            cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                             contentStyle={{
                                 borderRadius: '12px',
-                                border: 'none',
-                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                                border: '1px solid var(--vault-hairline)',
+                                backgroundColor: 'var(--vault-panel)',
+                                color: 'var(--vault-paper)'
                             }}
+                            labelStyle={{ color: 'var(--vault-muted)' }}
+                            formatter={(value) => [`${value} รายการ`, 'ลูกค้า']}
                         />
                         <Bar
                             dataKey="clients"
@@ -102,7 +114,7 @@ export default function ClientTimeAnalytics({ transactions }: ClientTimeAnalytic
                             {data.map((entry, index) => (
                                 <Cell
                                     key={`cell-${index}`}
-                                    fill={entry.clients > 0 ? `rgba(37, 99, 235, ${0.4 + (entry.clients / maxClients) * 0.6})` : '#E5E7EB'}
+                                    fill={entry.clients > 0 ? `rgba(37, 99, 235, ${0.35 + (entry.clients / maxClients) * 0.65})` : 'var(--vault-hairline)'}
                                 />
                             ))}
                         </Bar>

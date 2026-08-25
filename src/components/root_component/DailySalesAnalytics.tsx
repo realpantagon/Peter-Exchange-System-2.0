@@ -19,14 +19,14 @@ interface DailySalesAnalyticsProps {
     setRangeDays: (days: number) => void
 }
 
-// Fixed colors for known branches
+// Fixed colors for known branches — tuned bright enough to read on a dark vault surface
 const FIXED_BRANCH_COLORS: { [branch: string]: string } = {
-    '4': '#2563EB',  // ร้าน 4 = น้ำเงิน
-    '11': '#EAB308', // ร้าน 11 = เหลือง
+    '4': '#4C8DFF',   // ร้าน 4 = น้ำเงิน
+    '11': '#F59E0B',  // ร้าน 11 = ส้มอำพัน (แยกจากสีธีมน้ำเงินของหน้า)
 }
 
 // Fallback palette for any other branches
-const BRANCH_COLORS = ['#16A34A', '#EA580C', '#9333EA', '#DB2777', '#0891B2']
+const BRANCH_COLORS = ['#34D399', '#FB923C', '#A78BFA', '#F472B6', '#22D3EE']
 
 // Range options (days)
 const RANGE_OPTIONS = [
@@ -40,8 +40,10 @@ const RANGE_OPTIONS = [
 
 type Granularity = 'day' | 'week' | 'month'
 
-const getGranularity = (rangeDays: number): Granularity => {
-    if (rangeDays <= 31) return 'day'
+// Sensible default bucket size for a given lookback window — the user can
+// always override this with the รายวัน/รายสัปดาห์/รายเดือน toggle below.
+const defaultGranularity = (rangeDays: number): Granularity => {
+    if (rangeDays <= 14) return 'day'
     if (rangeDays <= 120) return 'week'
     return 'month'
 }
@@ -51,6 +53,8 @@ const GRANULARITY_LABEL: { [k in Granularity]: string } = {
     week: 'รายสัปดาห์',
     month: 'รายเดือน',
 }
+
+const GRANULARITY_OPTIONS: Granularity[] = ['day', 'week', 'month']
 
 // Map a date to its bucket key + display label for the chosen granularity
 const bucketKeyAndLabel = (d: Date, g: Granularity): { key: string; label: string } => {
@@ -76,7 +80,10 @@ const formatTHB = (value: number) =>
     new Intl.NumberFormat('th-TH', { maximumFractionDigits: 0 }).format(value)
 
 export default function DailySalesAnalytics({ transactions, rangeDays, setRangeDays }: DailySalesAnalyticsProps) {
-    const granularity = getGranularity(rangeDays)
+    // Defaults to "รายสัปดาห์" (not "รายวัน") so the breakdown table below
+    // doesn't open on 30 rows of dates — the user can switch to a daily or
+    // monthly bucket any time via the toggle, independent of the lookback range.
+    const [granularity, setGranularity] = useState<Granularity>(() => defaultGranularity(rangeDays))
 
     // All branches present in data
     const branches = useMemo(
@@ -187,29 +194,31 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
         })
 
     return (
-        <div className="bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-100/50 p-6 mb-6">
+        <div className="root-vault rounded-2xl p-5 sm:p-6" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>
             <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <h3 className="font-display text-base sm:text-lg font-semibold flex items-center gap-2" style={{ color: 'var(--vault-paper)' }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" style={{ color: 'var(--vault-brass)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M9 17V9m4 8V5m4 12v-6" />
                     </svg>
                     ยอดขายแยกตามร้าน (THB)
-                    <span className="text-xs font-medium text-gray-400">· {GRANULARITY_LABEL[granularity]}</span>
+                    <span className="text-xs font-normal" style={{ color: 'var(--vault-muted)' }}>· {GRANULARITY_LABEL[granularity]}</span>
                 </h3>
 
                 <div className="flex items-center gap-2">
                     {/* Chart type toggle */}
-                    <div className="flex rounded-xl border border-gray-200 bg-white p-0.5">
+                    <div className="flex rounded-xl p-0.5" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)' }}>
                         <button
                             onClick={() => setChartType('bar')}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${chartType === 'bar' ? 'bg-green-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                            style={chartType === 'bar' ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' } : { color: 'var(--vault-muted)' }}
                             title="กราฟแท่ง"
                         >
                             แท่ง
                         </button>
                         <button
                             onClick={() => setChartType('line')}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${chartType === 'line' ? 'bg-green-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                            style={chartType === 'line' ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' } : { color: 'var(--vault-muted)' }}
                             title="กราฟเส้น"
                         >
                             เส้น
@@ -220,7 +229,8 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                     <select
                         value={branchFilter}
                         onChange={(e) => setBranchFilter(e.target.value)}
-                        className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        className="px-4 py-2 rounded-xl text-sm font-medium focus:outline-none focus:ring-2"
+                        style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)', color: 'var(--vault-paper)' }}
                     >
                         <option value="">ทุกร้าน</option>
                         {branches.map(b => (
@@ -230,52 +240,73 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                 </div>
             </div>
 
-            {/* Range selector */}
-            <div className="flex flex-wrap gap-2 mb-6">
-                {RANGE_OPTIONS.map(opt => (
-                    <button
-                        key={opt.days}
-                        onClick={() => setRangeDays(opt.days)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${rangeDays === opt.days
-                            ? 'bg-green-600 text-white shadow-md shadow-green-200'
-                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                            }`}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
+            {/* Range selector + bucket-size (granularity) toggle — two independent
+                controls: how far back to look, and how to group what's shown. */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold" style={{ color: 'var(--vault-muted)' }}>ช่วงเวลา:</span>
+                    {RANGE_OPTIONS.map(opt => (
+                        <button
+                            key={opt.days}
+                            onClick={() => setRangeDays(opt.days)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                            style={rangeDays === opt.days
+                                ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }
+                                : { backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-muted)', border: '1px solid var(--vault-hairline)' }}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold" style={{ color: 'var(--vault-muted)' }}>มุมมอง:</span>
+                    <div className="flex rounded-xl p-0.5" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)' }}>
+                        {GRANULARITY_OPTIONS.map(g => (
+                            <button
+                                key={g}
+                                onClick={() => setGranularity(g)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                                style={granularity === g ? { backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' } : { color: 'var(--vault-muted)' }}
+                            >
+                                {GRANULARITY_LABEL[g]}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             {/* Today summary cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                 {visibleBranches.map(b => (
-                    <div key={b} className="rounded-xl border border-gray-100 bg-white/70 p-4">
+                    <div key={b} className="rounded-xl p-4" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)' }}>
                         <div className="flex items-center gap-2 mb-1">
                             <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: branchColor[b] }} />
-                            <span className="text-xs font-semibold text-gray-500 truncate" title={b}>ร้าน {b}</span>
+                            <span className="text-xs font-semibold truncate" style={{ color: 'var(--vault-muted)' }} title={b}>ร้าน {b}</span>
                         </div>
-                        <div className="text-xl font-bold text-gray-800">฿{formatTHB(todaySales[b] || 0)}</div>
-                        <div className="text-[11px] text-gray-400">ยอดขายวันนี้</div>
+                        <div className="font-figure text-xl font-semibold" style={{ color: 'var(--vault-paper)' }}>฿ {formatTHB(todaySales[b] || 0)}</div>
+                        <div className="text-[11px]" style={{ color: 'var(--vault-muted)' }}>ยอดขายวันนี้</div>
                     </div>
                 ))}
-                <div className="rounded-xl border border-green-100 bg-green-50/70 p-4">
-                    <div className="text-xs font-semibold text-green-600 mb-1">รวมทุกร้าน ({currentRangeLabel})</div>
-                    <div className="text-xl font-bold text-green-700">฿{formatTHB(grandTotal)}</div>
-                    <div className="text-[11px] text-green-500/70">total revenue</div>
+                <div className="rounded-xl p-4 relative overflow-hidden" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-brass-border)' }}>
+                    <div className="absolute inset-x-0 top-0 h-0.5" style={{ backgroundColor: 'var(--vault-brass)' }} />
+                    <div className="text-xs font-semibold mb-1" style={{ color: 'var(--vault-brass)' }}>รวมทุกร้าน ({currentRangeLabel})</div>
+                    <div className="font-figure text-xl font-semibold" style={{ color: 'var(--vault-paper)' }}>฿ {formatTHB(grandTotal)}</div>
+                    <div className="text-[11px]" style={{ color: 'var(--vault-muted)' }}>total revenue</div>
                 </div>
             </div>
 
-            {/* Chart: bar (grouped) or line (connecting dots per branch + black total) */}
+            {/* Chart: bar (grouped) or line (connecting dots per branch + brass total) */}
             <div className="h-[320px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     {chartType === 'bar' ? (
                         <BarChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--vault-hairline)" />
                             <XAxis
                                 dataKey="label"
                                 axisLine={false}
                                 tickLine={false}
-                                tick={{ fill: '#6B7280', fontSize: 11 }}
+                                tick={{ fill: 'var(--vault-muted)', fontSize: 11 }}
                                 dy={10}
                                 interval="preserveStartEnd"
                                 minTickGap={16}
@@ -283,28 +314,29 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                             <YAxis
                                 axisLine={false}
                                 tickLine={false}
-                                tick={{ fill: '#6B7280', fontSize: 12 }}
+                                tick={{ fill: 'var(--vault-muted)', fontSize: 12 }}
                                 tickFormatter={(v) => formatTHB(v as number)}
                                 width={70}
                             />
                             <Tooltip
-                                cursor={{ fill: '#F3F4F6' }}
-                                formatter={(value, name) => [`฿${formatTHB(Number(value) || 0)}`, `ร้าน ${name}`]}
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                                cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                                formatter={(value, name) => [`฿ ${formatTHB(Number(value) || 0)}`, `ร้าน ${name}`]}
+                                contentStyle={{ borderRadius: '12px', border: '1px solid var(--vault-hairline)', backgroundColor: 'var(--vault-panel)', color: 'var(--vault-paper)' }}
+                                labelStyle={{ color: 'var(--vault-muted)' }}
                             />
-                            <Legend formatter={(value) => `ร้าน ${value}`} />
+                            <Legend formatter={(value) => `ร้าน ${value}`} wrapperStyle={{ color: 'var(--vault-muted)', fontSize: 12 }} />
                             {visibleBranches.map(b => (
                                 <Bar key={b} dataKey={b} name={b} fill={branchColor[b]} radius={[6, 6, 0, 0]} maxBarSize={40} />
                             ))}
                         </BarChart>
                     ) : (
                         <LineChart data={lineData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--vault-hairline)" />
                             <XAxis
                                 dataKey="label"
                                 axisLine={false}
                                 tickLine={false}
-                                tick={{ fill: '#6B7280', fontSize: 11 }}
+                                tick={{ fill: 'var(--vault-muted)', fontSize: 11 }}
                                 dy={10}
                                 interval="preserveStartEnd"
                                 minTickGap={16}
@@ -312,15 +344,16 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                             <YAxis
                                 axisLine={false}
                                 tickLine={false}
-                                tick={{ fill: '#6B7280', fontSize: 12 }}
+                                tick={{ fill: 'var(--vault-muted)', fontSize: 12 }}
                                 tickFormatter={(v) => formatTHB(v as number)}
                                 width={70}
                             />
                             <Tooltip
-                                formatter={(value, name) => [`฿${formatTHB(Number(value) || 0)}`, name === 'รวม' ? 'รวมทุกร้าน' : `ร้าน ${name}`]}
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                                formatter={(value, name) => [`฿ ${formatTHB(Number(value) || 0)}`, name === 'รวม' ? 'รวมทุกร้าน' : `ร้าน ${name}`]}
+                                contentStyle={{ borderRadius: '12px', border: '1px solid var(--vault-hairline)', backgroundColor: 'var(--vault-panel)', color: 'var(--vault-paper)' }}
+                                labelStyle={{ color: 'var(--vault-muted)' }}
                             />
-                            <Legend formatter={(value) => (value === 'รวม' ? 'รวมทุกร้าน' : `ร้าน ${value}`)} />
+                            <Legend formatter={(value) => (value === 'รวม' ? 'รวมทุกร้าน' : `ร้าน ${value}`)} wrapperStyle={{ color: 'var(--vault-muted)', fontSize: 12 }} />
                             {visibleBranches.map(b => (
                                 <Line
                                     key={b}
@@ -338,9 +371,9 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                                 type="monotone"
                                 dataKey="__total"
                                 name="รวม"
-                                stroke="#000000"
+                                stroke="#1E293B"
                                 strokeWidth={2.5}
-                                dot={{ r: 3, fill: '#000000' }}
+                                dot={{ r: 3, fill: '#1E293B' }}
                                 activeDot={{ r: 5 }}
                             />
                         </LineChart>
@@ -349,10 +382,10 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
             </div>
 
             {/* Breakdown table */}
-            <div className="mt-6 overflow-x-auto max-h-[400px] overflow-y-auto">
+            <div className="mt-6 overflow-x-auto max-h-[400px] overflow-y-auto custom-scrollbar">
                 <table className="min-w-full text-sm">
-                    <thead className="sticky top-0 bg-white">
-                        <tr className="text-left text-gray-500 border-b border-gray-200">
+                    <thead className="sticky top-0" style={{ backgroundColor: 'var(--vault-panel)' }}>
+                        <tr className="text-left" style={{ borderBottom: '1px solid var(--vault-hairline)', color: 'var(--vault-muted)' }}>
                             <th className="py-2 pr-4 font-semibold">
                                 {granularity === 'day' ? 'วันที่' : granularity === 'week' ? 'สัปดาห์เริ่ม' : 'เดือน'}
                             </th>
@@ -371,41 +404,42 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                             return (
                                 <Fragment key={rowKey}>
                                     <tr
-                                        className={`border-b border-gray-100 cursor-pointer transition-colors ${isOpen ? 'bg-green-50/60' : 'hover:bg-gray-50'}`}
+                                        className="cursor-pointer transition-colors"
+                                        style={{ borderBottom: '1px solid var(--vault-hairline-soft)', backgroundColor: isOpen ? 'var(--vault-brass-tint)' : 'transparent' }}
                                         onClick={() => setExpandedKey(isOpen ? null : rowKey)}
                                     >
-                                        <td className="py-2 pr-4 text-gray-700">
+                                        <td className="py-2 pr-4" style={{ color: 'var(--vault-paper)' }}>
                                             <span className="inline-flex items-center gap-1.5">
-                                                <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-3.5 h-3.5 transition-transform" style={{ color: 'var(--vault-muted)', transform: isOpen ? 'rotate(90deg)' : undefined }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                                 </svg>
                                                 {row.label}
                                             </span>
                                             {rowKey === todayKey && (
-                                                <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">วันนี้</span>
+                                                <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}>วันนี้</span>
                                             )}
                                         </td>
                                         {visibleBranches.map(b => (
-                                            <td key={b} className="py-2 px-4 text-right text-gray-700">
-                                                ฿{formatTHB(row[b] as number || 0)}
+                                            <td key={b} className="py-2 px-4 text-right font-figure" style={{ color: 'var(--vault-paper)' }}>
+                                                ฿ {formatTHB(row[b] as number || 0)}
                                             </td>
                                         ))}
-                                        <td className="py-2 pl-4 text-right font-semibold text-gray-900">฿{formatTHB(rowTotal)}</td>
+                                        <td className="py-2 pl-4 text-right font-figure font-semibold" style={{ color: 'var(--vault-paper)' }}>฿ {formatTHB(rowTotal)}</td>
                                     </tr>
                                     {isOpen && (
                                         <tr>
                                             <td colSpan={visibleBranches.length + 2} className="p-0">
-                                                <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100">
-                                                    <div className="text-xs font-semibold text-gray-500 mb-2">
+                                                <div className="px-4 py-3" style={{ backgroundColor: 'var(--vault-bg)', borderBottom: '1px solid var(--vault-hairline-soft)' }}>
+                                                    <div className="text-xs font-semibold mb-2" style={{ color: 'var(--vault-muted)' }}>
                                                         รายการที่ขาย {detailTx.length} รายการ
                                                     </div>
                                                     {detailTx.length === 0 ? (
-                                                        <div className="text-xs text-gray-400 py-2">ไม่มีรายการ</div>
+                                                        <div className="text-xs py-2" style={{ color: 'var(--vault-muted)' }}>ไม่มีรายการ</div>
                                                     ) : (
-                                                        <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white">
+                                                        <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--vault-hairline-soft)' }}>
                                                             <table className="min-w-full text-xs">
                                                                 <thead>
-                                                                    <tr className="text-left text-gray-400 border-b border-gray-100 bg-gray-50/50">
+                                                                    <tr className="text-left" style={{ borderBottom: '1px solid var(--vault-hairline-soft)', color: 'var(--vault-muted)' }}>
                                                                         <th className="py-1.5 px-3 font-medium">เวลา</th>
                                                                         <th className="py-1.5 px-3 font-medium">ร้าน</th>
                                                                         <th className="py-1.5 px-3 font-medium">ประเภท</th>
@@ -418,20 +452,20 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                                                                 </thead>
                                                                 <tbody>
                                                                     {detailTx.map(t => (
-                                                                        <tr key={t.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
-                                                                            <td className="py-1.5 px-3 text-gray-600 whitespace-nowrap">{formatDateTime(t.created_at!)}</td>
+                                                                        <tr key={t.id} style={{ borderBottom: '1px solid var(--vault-hairline-soft)' }}>
+                                                                            <td className="py-1.5 px-3 whitespace-nowrap font-figure" style={{ color: 'var(--vault-muted)' }}>{formatDateTime(t.created_at!)}</td>
                                                                             <td className="py-1.5 px-3">
-                                                                                <span className="inline-flex items-center gap-1">
+                                                                                <span className="inline-flex items-center gap-1" style={{ color: 'var(--vault-paper)' }}>
                                                                                     <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: branchColor[t.Branch!] }} />
                                                                                     {t.Branch}
                                                                                 </span>
                                                                             </td>
-                                                                            <td className="py-1.5 px-3 text-gray-600">{t.Transaction_Type || '-'}</td>
-                                                                            <td className="py-1.5 px-3 font-medium text-gray-700">{t.Cur || t.Currency || '-'}</td>
-                                                                            <td className="py-1.5 px-3 text-right text-gray-600">{t.Amount || '-'}</td>
-                                                                            <td className="py-1.5 px-3 text-right text-gray-600">{t.Rate || '-'}</td>
-                                                                            <td className="py-1.5 px-3 text-right font-semibold text-gray-800">฿{formatTHB(parseFloat(t.Total_TH || '0') || 0)}</td>
-                                                                            <td className="py-1.5 px-3 text-gray-600 max-w-[140px] truncate" title={t.Customer_Name || ''}>{t.Customer_Name || '-'}</td>
+                                                                            <td className="py-1.5 px-3" style={{ color: 'var(--vault-muted)' }}>{t.Transaction_Type || '-'}</td>
+                                                                            <td className="py-1.5 px-3 font-medium" style={{ color: 'var(--vault-paper)' }}>{t.Cur || t.Currency || '-'}</td>
+                                                                            <td className="py-1.5 px-3 text-right font-figure" style={{ color: 'var(--vault-muted)' }}>{t.Amount || '-'}</td>
+                                                                            <td className="py-1.5 px-3 text-right font-figure" style={{ color: 'var(--vault-muted)' }}>{t.Rate || '-'}</td>
+                                                                            <td className="py-1.5 px-3 text-right font-figure font-semibold" style={{ color: 'var(--vault-paper)' }}>฿ {formatTHB(parseFloat(t.Total_TH || '0') || 0)}</td>
+                                                                            <td className="py-1.5 px-3 max-w-[140px] truncate" style={{ color: 'var(--vault-muted)' }} title={t.Customer_Name || ''}>{t.Customer_Name || '-'}</td>
                                                                         </tr>
                                                                     ))}
                                                                 </tbody>
@@ -447,12 +481,12 @@ export default function DailySalesAnalytics({ transactions, rangeDays, setRangeD
                         })}
                     </tbody>
                     <tfoot>
-                        <tr className="border-t-2 border-gray-200 font-bold text-gray-900 sticky bottom-0 bg-white">
+                        <tr className="font-bold sticky bottom-0" style={{ borderTop: '2px solid var(--vault-hairline)', backgroundColor: 'var(--vault-panel)', color: 'var(--vault-paper)' }}>
                             <td className="py-2 pr-4">รวมทั้งหมด</td>
                             {visibleBranches.map(b => (
-                                <td key={b} className="py-2 px-4 text-right">฿{formatTHB(branchTotals[b] || 0)}</td>
+                                <td key={b} className="py-2 px-4 text-right font-figure">฿ {formatTHB(branchTotals[b] || 0)}</td>
                             ))}
-                            <td className="py-2 pl-4 text-right text-green-700">฿{formatTHB(grandTotal)}</td>
+                            <td className="py-2 pl-4 text-right font-figure" style={{ color: 'var(--vault-brass)' }}>฿ {formatTHB(grandTotal)}</td>
                         </tr>
                     </tfoot>
                 </table>

@@ -1,0 +1,8 @@
+allowBuilds:
+  esbuild: true
+  supabase: true
+  usb: true
+onlyBuiltDependencies:
+  - esbuild
+  - supabase
+  - usb

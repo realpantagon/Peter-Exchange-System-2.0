@@ -72,24 +72,24 @@ export default function DailyCashFlow({ transactions, notify, branchId, date, is
     const isToday = selectedDate === toISODate(new Date())
 
     return (
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="root-vault rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>
             {/* Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 bg-gradient-to-r from-amber-50 to-white border-b border-amber-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-3" style={{ borderBottom: '1px solid var(--vault-hairline)' }}>
                 <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-brass-border)' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4.5 w-4.5" style={{ color: 'var(--vault-brass)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
                     </div>
-                    <div>
-                        <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
-                            กระแสเงินสดรายวัน
-                            {isToday && <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-[10px] font-bold">วันนี้</span>}
-                        </h3>
-                        <p className="text-[11px] text-gray-500">
-                            {isRoot ? 'โหมด Root · แก้ไข/ลบได้ทุกรายการ' : 'บันทึกแล้วล็อกทันที · แก้ไขได้เฉพาะ Root'}
-                        </p>
-                    </div>
+                    <h3 className="font-display text-base font-bold flex items-center gap-2" style={{ color: 'var(--vault-paper)' }}>
+                        กระแสเงินสดรายวัน
+                        {isToday && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}>วันนี้</span>
+                        )}
+                        <span className="text-xs font-normal hidden sm:inline" style={{ color: 'var(--vault-muted)' }}>
+                            · {isRoot ? 'Root แก้ไข/ลบได้' : 'ล็อกทันที แก้ไขได้เฉพาะ Root'}
+                        </span>
+                    </h3>
                 </div>
 
                 {date === undefined && (
@@ -98,17 +98,18 @@ export default function DailyCashFlow({ transactions, notify, branchId, date, is
                         value={selectedDate}
                         max={toISODate(new Date())}
                         onChange={(e) => setInternalDate(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="px-3 py-1.5 rounded-lg text-sm font-figure font-medium focus:outline-none focus:ring-2"
+                        style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)', color: 'var(--vault-paper)' }}
                     />
                 )}
             </div>
 
             {/* Body */}
-            <div className="p-4 sm:p-6 space-y-5">
+            <div className="p-2.5 sm:p-3 space-y-2.5">
                 {loading ? (
-                    <div className="text-sm text-gray-400 py-8 text-center">กำลังโหลด...</div>
+                    <div className="text-sm py-6 text-center" style={{ color: 'var(--vault-muted)' }}>กำลังโหลด...</div>
                 ) : branches.length === 0 ? (
-                    <div className="text-sm text-gray-400 py-8 text-center">ไม่มีข้อมูลร้านในช่วงที่ดึงมา</div>
+                    <div className="text-sm py-6 text-center" style={{ color: 'var(--vault-muted)' }}>ไม่มีข้อมูลร้านในช่วงที่ดึงมา</div>
                 ) : (
                     branches.map(b => (
                         <BranchCashPanel
@@ -206,7 +207,7 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
         } catch { notify?.('แก้ไขไม่สำเร็จ', 'error') }
     }
     const removeEntry = async (l: PeterExchangeBalanceLog) => {
-        if (!window.confirm(`ลบรายการ ${l.Kind === 'opening' ? 'เงินเปิด' : 'เงินปิด'} ฿${formatTHB(Number(l.Amount))} ?`)) return
+        if (!window.confirm(`ลบรายการ ${l.Kind === 'opening' ? 'เงินเปิด' : 'เงินปิด'} ฿ ${formatTHB(Number(l.Amount))} ?`)) return
         try { await deleteBalanceLog(l.id); notify?.('ลบรายการเรียบร้อย', 'success'); onChanged() }
         catch { notify?.('ลบไม่สำเร็จ', 'error') }
     }
@@ -219,55 +220,56 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
                     <input
                         type="number" value={editValue} autoFocus
                         onChange={(e) => setEditValue(e.target.value)}
-                        className="w-28 px-2 py-1 rounded-lg border border-gray-300 text-right text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-28 px-2 py-1.5 rounded-lg text-right text-sm font-figure font-semibold focus:outline-none focus:ring-2"
+                        style={{ backgroundColor: 'var(--vault-bg)', border: '1px solid var(--vault-hairline)', color: 'var(--vault-paper)' }}
                     />
-                    <button onClick={() => saveEdit(l)} className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700">✓</button>
-                    <button onClick={() => setEditingId(null)} className="px-2 py-1 rounded-lg bg-gray-100 text-gray-600 text-xs hover:bg-gray-200">✕</button>
+                    <button onClick={() => saveEdit(l)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}>✓</button>
+                    <button onClick={() => setEditingId(null)} className="px-2.5 py-1.5 rounded-lg text-sm" style={{ backgroundColor: 'var(--vault-panel-raised)', color: 'var(--vault-muted)' }}>✕</button>
                 </div>
             )
         }
         return (
-            <div className="flex items-baseline gap-2">
-                <span className="text-lg font-bold text-gray-900 tabular-nums">฿{formatTHB(Number(l.Amount))}</span>
-                <span className="text-[10px] text-gray-400">{formatTime(l.created_at)} น.</span>
+            <span className="inline-flex items-center gap-2 whitespace-nowrap shrink-0">
+                <span className="font-figure text-base sm:text-lg font-bold" style={{ color: 'var(--vault-paper)' }}>฿ {formatTHB(Number(l.Amount))}</span>
+                <span className="text-xs" style={{ color: 'var(--vault-muted)' }}>{formatTime(l.created_at)}</span>
                 {isRoot ? (
-                    <span className="flex items-center gap-0.5">
-                        <button onClick={() => startEdit(l)} title="แก้ไข" className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    <span className="inline-flex items-center gap-1">
+                        <button onClick={() => startEdit(l)} title="แก้ไข" className="p-1 rounded hover:opacity-100 opacity-70" style={{ color: 'var(--vault-brass)' }}>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                         </button>
-                        <button onClick={() => removeEntry(l)} title="ลบ" className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        <button onClick={() => removeEntry(l)} title="ลบ" className="p-1 rounded hover:opacity-100 opacity-70" style={{ color: 'var(--vault-ink-debit)' }}>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                     </span>
                 ) : (
-                    <span title="ล็อกแล้ว — แก้ไขได้เฉพาะ Root" className="text-gray-300">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    <span title="ล็อกแล้ว — แก้ไขได้เฉพาะ Root" style={{ color: 'var(--vault-hairline)' }}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                     </span>
                 )}
-            </div>
+            </span>
         )
     }
 
     const totalRounds = rounds.length + (showFirstOpening || showAddedOpening ? 1 : 0)
 
     return (
-        <div className="rounded-xl border border-gray-200 overflow-hidden">
+        <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--vault-hairline)' }}>
             {/* Branch header with day flow */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-                <span className="font-bold text-gray-800 flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-md bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">{branch}</span>
+            <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5" style={{ backgroundColor: 'var(--vault-panel-raised)', borderBottom: '1px solid var(--vault-hairline)' }}>
+                <span className="text-base font-bold flex items-center gap-2" style={{ color: 'var(--vault-paper)' }}>
+                    <span className="w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center font-figure" style={{ backgroundColor: 'var(--vault-bg)', color: 'var(--vault-brass)' }}>{branch}</span>
                     ร้าน {branch}
                 </span>
-                <span className="text-xs text-gray-500 flex items-center gap-3">
-                    <span className="text-green-600">รับ +฿{formatTHB(flow.thbIn)}</span>
-                    <span className="text-red-600">จ่าย −฿{formatTHB(flow.thbOut)}</span>
-                    <span className={dayNet >= 0 ? 'text-green-700 font-semibold' : 'text-red-700 font-semibold'}>
-                        สุทธิ {dayNet >= 0 ? '+' : '−'}฿{formatTHB(Math.abs(dayNet))}
+                <span className="text-xs sm:text-sm flex items-center gap-3 font-figure">
+                    <span style={{ color: 'var(--vault-ink-credit)' }}>รับ +฿ {formatTHB(flow.thbIn)}</span>
+                    <span style={{ color: 'var(--vault-ink-debit)' }}>จ่าย −฿ {formatTHB(flow.thbOut)}</span>
+                    <span className="font-bold" style={{ color: dayNet >= 0 ? 'var(--vault-ink-credit)' : 'var(--vault-ink-debit)' }}>
+                        สุทธิ {dayNet >= 0 ? '+' : '−'}฿ {formatTHB(Math.abs(dayNet))}
                     </span>
                 </span>
             </div>
 
-            <div className="p-3 space-y-3">
+            <div className="p-2 space-y-2">
                 {/* Persisted rounds */}
                 {rounds.map((r, i) => {
                     const isAwaiting = i === awaitingIndex
@@ -279,15 +281,12 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
                             left={<LockedEntry l={r.opening} />}
                             right={
                                 r.closing ? (
-                                    <div className="space-y-1">
+                                    <span className="inline-flex items-center gap-2 flex-wrap">
                                         <LockedEntry l={r.closing} />
                                         {diff !== null && (
-                                            <div className={`text-[11px] font-medium ${diff === 0 ? 'text-green-600' : diff > 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                                ระบบคิด ฿{formatTHB(Number(r.closing.System_Snapshot ?? 0))} ·{' '}
-                                                {diff === 0 ? 'ตรงระบบ ✓' : `${diff > 0 ? 'เกิน +' : 'ขาด −'}฿${formatTHB(Math.abs(diff))}`}
-                                            </div>
+                                            <SystemFigureChip amount={Number(r.closing.System_Snapshot ?? 0)} diff={diff} />
                                         )}
-                                    </div>
+                                    </span>
                                 ) : isAwaiting ? (
                                     <ClosingInput
                                         value={closeAmt}
@@ -298,7 +297,7 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
                                         previewDiff={closePreviewDiff}
                                     />
                                 ) : (
-                                    <span className="text-xs text-gray-300">—</span>
+                                    <span className="text-xs" style={{ color: 'var(--vault-hairline)' }}>—</span>
                                 )
                             }
                             complete={!!r.closing}
@@ -313,7 +312,7 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
                         left={
                             <OpeningInput value={openAmt} onChange={setOpenAmt} onSave={saveOpening} saving={saving} />
                         }
-                        right={<span className="text-xs text-gray-300">บันทึกเงินเปิดก่อน</span>}
+                        right={<span className="text-xs" style={{ color: 'var(--vault-hairline)' }}>บันทึกเงินเปิดก่อน</span>}
                         complete={false}
                     />
                 )}
@@ -322,7 +321,10 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
                 {showAddButton && (
                     <button
                         onClick={() => setShowNew(true)}
-                        className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-300 text-sm font-medium text-gray-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50/50 transition-colors flex items-center justify-center gap-1.5"
+                        className="w-full py-2.5 rounded-lg border-2 border-dashed text-sm font-bold flex items-center justify-center gap-2 transition-colors"
+                        style={{ borderColor: 'var(--vault-hairline)', color: 'var(--vault-muted)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--vault-brass)'; e.currentTarget.style.color = 'var(--vault-brass)' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--vault-hairline)'; e.currentTarget.style.color = 'var(--vault-muted)' }}
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                         เพิ่มรอบเปิด–ปิดใหม่ของวันนี้
@@ -335,27 +337,60 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
 
 // ---------------------------------------------------------------------------
 
-// One round = opening (left) paired with closing (right)
+// One round = opening (left) paired with closing (right).
+// Desktop: a single compact row. Mobile: opening/closing stack as their own
+// lines (a horizontal squeeze here reads as scrambled text, not compact).
 function RoundCard({ index, left, right, complete }: { index: number; left: ReactNode; right: ReactNode; complete: boolean }) {
+    const badge = complete
+        ? <span className="text-xs px-2 py-1 rounded-full font-bold shrink-0" style={{ backgroundColor: 'rgba(79,174,129,0.15)', color: 'var(--vault-ink-credit)' }}>ครบแล้ว</span>
+        : <span className="text-xs px-2 py-1 rounded-full font-bold shrink-0" style={{ backgroundColor: 'var(--vault-brass-tint)', color: 'var(--vault-brass)' }}>รอบันทึก</span>
+
     return (
-        <div className="rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50/70 border-b border-gray-100">
-                <span className="text-[11px] font-semibold text-gray-500">รอบที่ {index}</span>
-                {complete
-                    ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">ครบแล้ว</span>
-                    : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">รอบันทึก</span>}
+        <div
+            className="rounded-xl overflow-hidden"
+            style={{ border: '1px solid var(--vault-hairline)', backgroundColor: complete ? 'var(--vault-panel)' : 'var(--vault-brass-faint)' }}
+        >
+            {/* Mobile-only mini header: round # + status (hidden from sm: up, folded into the row instead) */}
+            <div className="flex sm:hidden items-center justify-between px-3 py-1.5" style={{ borderBottom: '1px solid var(--vault-hairline)' }}>
+                <span className="text-xs font-bold" style={{ color: 'var(--vault-muted)' }}>รอบที่ {index}</span>
+                {badge}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
-                <div className="p-3 bg-blue-50/30">
-                    <div className="text-[11px] font-semibold text-blue-700 mb-1.5 flex items-center gap-1">☀️ เงินเปิด</div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 py-2.5 sm:py-3">
+                <span className="hidden sm:inline-block text-xs font-bold shrink-0 w-4 text-center" style={{ color: 'var(--vault-muted)' }}>{index}</span>
+
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm shrink-0" title="เงินเปิด">☀️</span>
                     {left}
-                </div>
-                <div className="p-3 bg-amber-50/30">
-                    <div className="text-[11px] font-semibold text-amber-700 mb-1.5 flex items-center gap-1">🌙 เงินปิด</div>
+                </span>
+
+                <span className="hidden sm:inline shrink-0 text-sm" style={{ color: 'var(--vault-hairline)' }}>›</span>
+
+                <span className="inline-flex items-center gap-1.5 min-w-0 sm:flex-1 flex-wrap">
+                    <span className="text-sm shrink-0" title="เงินปิด">🌙</span>
                     {right}
-                </div>
+                </span>
+
+                <span className="hidden sm:inline-flex">{badge}</span>
             </div>
         </div>
+    )
+}
+
+// Prominent "system-calculated" figure — shown both as a live preview while
+// entering a closing count, and pinned next to a saved closing entry.
+function SystemFigureChip({ amount, diff }: { amount: number; diff: number | null }) {
+    return (
+        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg flex-wrap" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)' }}>
+            <span className="text-[11px] font-bold uppercase tracking-wide shrink-0" style={{ color: 'var(--vault-muted)' }}>ระบบคิด</span>
+            <span className="font-figure text-base sm:text-lg font-extrabold" style={{ color: 'var(--vault-paper)' }}>฿ {formatTHB(amount)}</span>
+            {diff !== null && diff !== 0 && (
+                <span className="font-figure text-sm sm:text-base font-extrabold" style={{ color: diff > 0 ? 'var(--vault-branch-blue)' : 'var(--vault-ink-debit)' }}>
+                    {diff > 0 ? 'เกิน +' : 'ขาด −'}฿ {formatTHB(Math.abs(diff))}
+                </span>
+            )}
+            {diff === 0 && <span className="text-sm sm:text-base font-extrabold" style={{ color: 'var(--vault-ink-credit)' }}>ตรง ✓</span>}
+        </span>
     )
 }
 
@@ -366,10 +401,11 @@ function OpeningInput({ value, onChange, onSave, saving }: { value: string; onCh
                 type="number" inputMode="decimal" value={value} placeholder="จำนวนเงินเปิด"
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !saving) onSave() }}
-                className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-32 sm:w-36 min-w-0 px-3 py-2 rounded-lg text-right text-base font-figure font-semibold focus:outline-none focus:ring-2"
+                style={{ backgroundColor: 'var(--vault-bg)', border: '1px solid var(--vault-hairline)', color: 'var(--vault-paper)' }}
             />
-            <button onClick={onSave} disabled={saving} className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
-                ☀️ บันทึกเปิด
+            <button onClick={onSave} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 whitespace-nowrap" style={{ backgroundColor: 'var(--vault-branch-blue)', color: 'var(--vault-blue-ink)' }}>
+                บันทึกเปิด
             </button>
         </div>
     )
@@ -379,27 +415,20 @@ function ClosingInput({ value, onChange, onSave, saving, expected, previewDiff }
     value: string; onChange: (v: string) => void; onSave: () => void; saving: boolean; expected: number; previewDiff: number | null
 }) {
     return (
-        <div>
-            <div className="flex items-center gap-2">
+        <span className="inline-flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-2 shrink-0">
                 <input
                     type="number" inputMode="decimal" value={value} placeholder="นับเงินจริง"
                     onChange={(e) => onChange(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !saving) onSave() }}
-                    className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-28 sm:w-32 min-w-0 px-3 py-2 rounded-lg text-right text-base font-figure font-semibold focus:outline-none focus:ring-2"
+                    style={{ backgroundColor: 'var(--vault-bg)', border: '1px solid var(--vault-hairline)', color: 'var(--vault-paper)' }}
                 />
-                <button onClick={onSave} disabled={saving} className="px-3 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap">
-                    🌙 บันทึกปิด
+                <button onClick={onSave} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 whitespace-nowrap" style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}>
+                    บันทึกปิด
                 </button>
-            </div>
-            <div className="mt-1 text-[11px] text-gray-500">
-                ระบบคิด ฿{formatTHB(expected)}
-                {previewDiff !== null && previewDiff !== 0 && (
-                    <span className={previewDiff > 0 ? 'text-blue-600 font-medium' : 'text-red-600 font-medium'}>
-                        {' '}· {previewDiff > 0 ? 'เกิน +' : 'ขาด −'}฿{formatTHB(Math.abs(previewDiff))}
-                    </span>
-                )}
-                {previewDiff === 0 && <span className="text-green-600 font-medium"> · ตรงระบบ ✓</span>}
-            </div>
-        </div>
+            </span>
+            <SystemFigureChip amount={expected} diff={previewDiff} />
+        </span>
     )
 }
