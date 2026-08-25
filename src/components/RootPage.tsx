@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { getTransactions, getDailySales, updateTransaction, deleteTransaction, type DailySalesRow } from '../lib/api'
 import type { Transaction } from '../utils/currencyUtils'
@@ -42,7 +42,11 @@ export default function RootPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rangeDays])
 
-    const fetchTransactions = async () => {
+    // Which raw window is already in state — switching 3 เดือน -> 1 ปี does not
+    // change it (both cap at RAW_WINDOW_DAYS), so the raw rows are not re-pulled.
+    const loadedRawDays = useRef<number | null>(null)
+
+    const fetchTransactions = async (force = false) => {
         setLoading(true)
         try {
             // Charts: daily totals across the whole selected range (cheap)
@@ -50,16 +54,21 @@ export default function RootPage() {
             summaryStart.setDate(summaryStart.getDate() - rangeDays)
 
             // Raw ledger: only the recent window (see RAW_WINDOW_DAYS)
+            const rawDays = Math.min(rangeDays, RAW_WINDOW_DAYS)
             const rawStart = new Date()
-            rawStart.setDate(rawStart.getDate() - Math.min(rangeDays, RAW_WINDOW_DAYS))
+            rawStart.setDate(rawStart.getDate() - rawDays)
+            const needRaw = force || loadedRawDays.current !== rawDays
 
             const [summary, rows] = await Promise.all([
                 getDailySales(summaryStart.toISOString()),
-                getTransactions(rawStart.toISOString()),
+                needRaw ? getTransactions(rawStart.toISOString()) : Promise.resolve(null),
             ])
 
             setDailySales(summary)
-            setTransactions(rows)
+            if (rows) {
+                setTransactions(rows)
+                loadedRawDays.current = rawDays
+            }
         } catch (error) {
             console.error('Error fetching transactions:', error)
             setToast({ message: 'โหลดข้อมูลไม่สำเร็จ', type: 'error' })
@@ -79,7 +88,7 @@ export default function RootPage() {
             try {
                 await deleteTransaction(transaction.id)
                 setToast({ message: 'Transaction deleted successfully', type: 'success' })
-                fetchTransactions()
+                fetchTransactions(true)
             } catch (error) {
                 console.error('Error deleting transaction:', error)
                 setToast({ message: 'Failed to delete transaction', type: 'error' })
@@ -109,7 +118,7 @@ export default function RootPage() {
             await updateTransaction(updatedTx.id, txToUpdate)
             setToast({ message: 'Transaction updated successfully', type: 'success' })
             setEditingTransaction(null)
-            fetchTransactions()
+            fetchTransactions(true)
         } catch (error) {
             console.error('Error updating transaction:', error)
             setToast({ message: 'Failed to update transaction', type: 'error' })
@@ -200,7 +209,7 @@ export default function RootPage() {
                             <RootTransactionTable
                                 transactions={filteredTransactions}
                                 loading={loading}
-                                onRefresh={fetchTransactions}
+                                onRefresh={() => fetchTransactions(true)}
                                 selectedDateFilter={selectedDateFilter}
                                 setSelectedDateFilter={setSelectedDateFilter}
                                 availableDates={availableDates} // 10 Days

@@ -248,8 +248,21 @@ api.get('/summary/daily', async (c) => {
                GROUP BY day, branch
                ORDER BY day`;
 
+  // Cached at the edge for a minute: every day but today is already final, and
+  // the dashboard re-asks for the same ranges as the user flips between
+  // 7 วัน / 1 เดือน / 1 ปี. Auth has already run, so nothing unauthenticated
+  // can reach this.
+  const cache = caches.default;
+  const cacheKey = new Request(new URL(c.req.url).toString(), { method: 'GET' });
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
   const { results } = await c.env.DB.prepare(sql).bind(...binds).all();
-  return c.json(results);
+
+  const response = c.json(results);
+  response.headers.set('Cache-Control', 'public, max-age=60');
+  c.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
 });
 
 api.post('/transactions', zValidator('json', txnBody), async (c) => {
