@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { getTransactions } from '../lib/api'
 import type { Transaction } from '../utils/currencyUtils'
 import ClientTimeAnalytics from './root_component/ClientTimeAnalytics'
-import DailyCashFlow from './root_component/DailyCashFlow'
 import Toast from './system_component/Toast'
 
 const BRANCH_COLORS: { [b: string]: string } = { '4': '#2563EB', '11': '#EAB308' }
@@ -57,32 +55,6 @@ export default function DailyDetailPage() {
         [dayTx]
     )
 
-    // Summary
-    const summary = useMemo(() => {
-        let received = 0, paid = 0
-        dayTx.forEach(t => {
-            const total = Math.abs(parseFloat(t.Total_TH || '0') || 0)
-            if (t.Transaction_Type === 'Selling') received += total
-            else paid += total
-        })
-        return { count: dayTx.length, received, paid, net: received - paid }
-    }, [dayTx])
-
-    // Per-branch quick stats
-    const perBranch = useMemo(() => {
-        const map: { [b: string]: { count: number; received: number; paid: number } } = {}
-        const list = branchFilter ? [branchFilter] : branches
-        list.forEach(b => (map[b] = { count: 0, received: 0, paid: 0 }))
-        dayTx.forEach(t => {
-            if (!t.Branch || !map[t.Branch]) return
-            const total = Math.abs(parseFloat(t.Total_TH || '0') || 0)
-            map[t.Branch].count++
-            if (t.Transaction_Type === 'Selling') map[t.Branch].received += total
-            else map[t.Branch].paid += total
-        })
-        return map
-    }, [dayTx, branches, branchFilter])
-
     const isToday = selectedDate === toISODate(new Date())
     const dateLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString('th-TH', {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
@@ -90,21 +62,9 @@ export default function DailyDetailPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex flex-wrap justify-between items-center gap-4 sticky top-0 z-20 shadow-sm">
-                <div className="flex items-center gap-4">
-                    <img src="/Ex_logo_6.png" alt="Logo" className="h-10 w-auto" />
-                    <h1 className="text-xl font-bold text-gray-800">รายละเอียดรายวัน</h1>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Link to="/root" className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-1.5">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                        กลับ Root
-                    </Link>
-                </div>
-            </div>
+            <div className="flex-1 p-4 sm:p-6 w-full mx-auto space-y-6">
+                <h1 className="text-xl font-bold text-gray-800">รายละเอียดรายวัน</h1>
 
-            <div className="flex-1 p-6 w-full mx-auto space-y-6">
                 {/* Controls */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-wrap items-center justify-between gap-4">
                     <div>
@@ -133,62 +93,8 @@ export default function DailyDetailPage() {
                     </div>
                 </div>
 
-                {/* Summary cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                        <div className="text-xs font-semibold text-gray-500 mb-1">จำนวนรายการ</div>
-                        <div className="text-2xl font-bold text-gray-800">{summary.count}</div>
-                    </div>
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                        <div className="text-xs font-semibold text-green-600 mb-1">เงินสดรับ (ขาย)</div>
-                        <div className="text-2xl font-bold text-green-700">฿{formatTHB(summary.received)}</div>
-                    </div>
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                        <div className="text-xs font-semibold text-red-600 mb-1">เงินสดจ่าย (ซื้อ)</div>
-                        <div className="text-2xl font-bold text-red-700">฿{formatTHB(summary.paid)}</div>
-                    </div>
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                        <div className="text-xs font-semibold text-gray-500 mb-1">กระแสเงินสดสุทธิ</div>
-                        <div className={`text-2xl font-bold ${summary.net >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                            {summary.net >= 0 ? '+' : '−'}฿{formatTHB(Math.abs(summary.net))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Per-branch chips */}
-                {!branchFilter && branches.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {branches.map(b => {
-                            const s = perBranch[b]
-                            return (
-                                <div key={b} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: branchColor(b) }} />
-                                        <span className="font-bold text-gray-800">ร้าน {b}</span>
-                                        <span className="text-xs text-gray-400">{s?.count || 0} รายการ</span>
-                                    </div>
-                                    <div className="text-sm">
-                                        <span className="text-green-600">+฿{formatTHB(s?.received || 0)}</span>
-                                        <span className="text-gray-300 mx-1">/</span>
-                                        <span className="text-red-600">−฿{formatTHB(s?.paid || 0)}</span>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                )}
-
                 {/* Hourly traffic graph */}
                 <ClientTimeAnalytics transactions={dayTx} />
-
-                {/* Cash flow (controlled by this page's date) */}
-                <DailyCashFlow
-                    transactions={transactions}
-                    date={selectedDate}
-                    branchId={branchFilter || undefined}
-                    notify={(message, type) => setToast({ message, type })}
-                    isRoot
-                />
 
                 {/* Detailed timeline */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

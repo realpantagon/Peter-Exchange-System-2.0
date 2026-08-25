@@ -18,6 +18,10 @@ interface DailyCashFlowProps {
     date?: string
     // Root pages pass true → may edit/delete existing entries. Staff (default) can only append.
     isRoot?: boolean
+    // When provided, the header itself becomes the expand/collapse trigger
+    // (a chevron appears) instead of the body always rendering.
+    collapsed?: boolean
+    onToggleCollapsed?: () => void
 }
 
 const formatTHB = (value: number) =>
@@ -29,9 +33,19 @@ const toISODate = (d: Date) => d.toLocaleDateString('en-CA') // en-CA => YYYY-MM
 const formatTime = (iso: string) =>
     new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
 
+// Fuses an icon with its content into one atomic unit so flex-wrap can never
+// strand the icon on its own line, separated from the amount it labels —
+// only ever wraps together as a pair, at any width.
+const withIcon = (icon: string, title: string, content: ReactNode) => (
+    <span className="inline-flex items-start gap-1.5 min-w-0">
+        <span className="text-sm shrink-0" title={title}>{icon}</span>
+        <span className="min-w-0">{content}</span>
+    </span>
+)
+
 interface Flow { thbIn: number; thbOut: number }
 
-export default function DailyCashFlow({ transactions, notify, branchId, date, isRoot = false }: DailyCashFlowProps) {
+export default function DailyCashFlow({ transactions, notify, branchId, date, isRoot = false, collapsed = false, onToggleCollapsed }: DailyCashFlowProps) {
     const [internalDate, setInternalDate] = useState<string>(toISODate(new Date()))
     const selectedDate = date ?? internalDate
     const [logs, setLogs] = useState<PeterExchangeBalanceLog[]>([])
@@ -73,8 +87,12 @@ export default function DailyCashFlow({ transactions, notify, branchId, date, is
 
     return (
         <div className="root-vault rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>
-            {/* Header */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-3" style={{ borderBottom: '1px solid var(--vault-hairline)' }}>
+            {/* Header — doubles as the expand/collapse trigger when onToggleCollapsed is passed */}
+            <div
+                className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-3"
+                style={{ borderBottom: '1px solid var(--vault-hairline)', cursor: onToggleCollapsed ? 'pointer' : undefined }}
+                onClick={onToggleCollapsed}
+            >
                 <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-brass-border)' }}>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4.5 w-4.5" style={{ color: 'var(--vault-brass)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -92,19 +110,32 @@ export default function DailyCashFlow({ transactions, notify, branchId, date, is
                     </h3>
                 </div>
 
-                {date === undefined && (
-                    <input
-                        type="date"
-                        value={selectedDate}
-                        max={toISODate(new Date())}
-                        onChange={(e) => setInternalDate(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg text-sm font-figure font-medium focus:outline-none focus:ring-2"
-                        style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)', color: 'var(--vault-paper)' }}
-                    />
-                )}
+                <div className="flex items-center gap-2">
+                    {date === undefined && (
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            max={toISODate(new Date())}
+                            onChange={(e) => setInternalDate(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-3 py-1.5 rounded-lg text-sm font-figure font-medium focus:outline-none focus:ring-2"
+                            style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)', color: 'var(--vault-paper)' }}
+                        />
+                    )}
+                    {onToggleCollapsed && (
+                        <svg
+                            className={`w-5 h-5 shrink-0 transition-transform ${collapsed ? '' : 'rotate-180'}`}
+                            style={{ color: 'var(--vault-brass)' }}
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    )}
+                </div>
             </div>
 
             {/* Body */}
+            {!collapsed && (
             <div className="p-2.5 sm:p-3 space-y-2.5">
                 {loading ? (
                     <div className="text-sm py-6 text-center" style={{ color: 'var(--vault-muted)' }}>กำลังโหลด...</div>
@@ -125,6 +156,7 @@ export default function DailyCashFlow({ transactions, notify, branchId, date, is
                     ))
                 )}
             </div>
+            )}
         </div>
     )
 }
@@ -278,26 +310,28 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
                         <RoundCard
                             key={r.opening.id}
                             index={i + 1}
-                            left={<LockedEntry l={r.opening} />}
+                            left={withIcon('☀️', 'เงินเปิด', <LockedEntry l={r.opening} />)}
                             right={
                                 r.closing ? (
                                     <span className="inline-flex items-center gap-2 flex-wrap">
-                                        <LockedEntry l={r.closing} />
+                                        {withIcon('🌙', 'เงินปิด', <LockedEntry l={r.closing} />)}
                                         {diff !== null && (
                                             <SystemFigureChip amount={Number(r.closing.System_Snapshot ?? 0)} diff={diff} />
                                         )}
                                     </span>
                                 ) : isAwaiting ? (
-                                    <ClosingInput
-                                        value={closeAmt}
-                                        onChange={setCloseAmt}
-                                        onSave={saveClosing}
-                                        saving={saving}
-                                        expected={expectedClosing}
-                                        previewDiff={closePreviewDiff}
-                                    />
+                                    withIcon('🌙', 'เงินปิด', (
+                                        <ClosingInput
+                                            value={closeAmt}
+                                            onChange={setCloseAmt}
+                                            onSave={saveClosing}
+                                            saving={saving}
+                                            expected={expectedClosing}
+                                            previewDiff={closePreviewDiff}
+                                        />
+                                    ))
                                 ) : (
-                                    <span className="text-xs" style={{ color: 'var(--vault-hairline)' }}>—</span>
+                                    withIcon('🌙', 'เงินปิด', <span className="text-xs" style={{ color: 'var(--vault-hairline)' }}>—</span>)
                                 )
                             }
                             complete={!!r.closing}
@@ -309,10 +343,8 @@ function BranchCashPanel({ branch, date, flow, logs, isRoot, notify, onChanged }
                 {(showFirstOpening || showAddedOpening) && (
                     <RoundCard
                         index={totalRounds}
-                        left={
-                            <OpeningInput value={openAmt} onChange={setOpenAmt} onSave={saveOpening} saving={saving} />
-                        }
-                        right={<span className="text-xs" style={{ color: 'var(--vault-hairline)' }}>บันทึกเงินเปิดก่อน</span>}
+                        left={withIcon('☀️', 'เงินเปิด', <OpeningInput value={openAmt} onChange={setOpenAmt} onSave={saveOpening} saving={saving} />)}
+                        right={withIcon('🌙', 'เงินปิด', <span className="text-xs" style={{ color: 'var(--vault-hairline)' }}>บันทึกเงินเปิดก่อน</span>)}
                         complete={false}
                     />
                 )}
@@ -359,17 +391,11 @@ function RoundCard({ index, left, right, complete }: { index: number; left: Reac
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 py-2.5 sm:py-3">
                 <span className="hidden sm:inline-block text-xs font-bold shrink-0 w-4 text-center" style={{ color: 'var(--vault-muted)' }}>{index}</span>
 
-                <span className="inline-flex items-center gap-1.5 min-w-0">
-                    <span className="text-sm shrink-0" title="เงินเปิด">☀️</span>
-                    {left}
-                </span>
+                {left}
 
                 <span className="hidden sm:inline shrink-0 text-sm" style={{ color: 'var(--vault-hairline)' }}>›</span>
 
-                <span className="inline-flex items-center gap-1.5 min-w-0 sm:flex-1 flex-wrap">
-                    <span className="text-sm shrink-0" title="เงินปิด">🌙</span>
-                    {right}
-                </span>
+                <span className="min-w-0 sm:flex-1">{right}</span>
 
                 <span className="hidden sm:inline-flex">{badge}</span>
             </div>

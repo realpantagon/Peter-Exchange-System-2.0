@@ -3,6 +3,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { getTransactions } from '../lib/api'
 import type { Transaction } from '../utils/currencyUtils'
 import { getFlagIcon } from '../utils/currencyUtils'
+import DailyCashFlow from './root_component/DailyCashFlow'
+import Toast from './system_component/Toast'
 
 interface CurrencySummary {
     currency: string
@@ -40,6 +42,8 @@ const sortedCurrencies = (map: Map<string, CurrencySummary>) =>
 
 const formatCurrency = (amount: number) =>
     amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+const toISODate = (d: Date) => d.toLocaleDateString('en-CA') // en-CA => YYYY-MM-DD
 
 // Branch header accent — a couple of branches get a distinct color to spot
 // them at a glance in the list; everything else stays the neutral white/gray.
@@ -123,18 +127,15 @@ const computeBranchSummaries = (transactions: Transaction[]): BranchSummary[] =>
 export default function SuperAdminPage() {
     const [transactions, setTransactions] = useState<Transaction[]>([])
     const [loading, setLoading] = useState(true)
-    // Date filtering
-    const [dateMode, setDateMode] = useState<'quick' | 'range'>('quick')
+    // Date filtering — one control up top drives everything, including the
+    // cash-flow section below (no separate date picker duplicated there).
+    const [dateMode, setDateMode] = useState<'today' | 'pick' | 'range'>('today')
     const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(new Date().toDateString()) // Default to Today
+    const [pickedDate, setPickedDate] = useState('') // yyyy-mm-dd, used in 'pick' mode
     const [dateFrom, setDateFrom] = useState('')
     const [dateTo, setDateTo] = useState('')
-
-    // Generate last 4 days including today
-    const availableDates = Array.from({ length: 4 }, (_, i) => {
-        const d = new Date()
-        d.setDate(d.getDate() - (3 - i)) // -3, -2, -1, 0 (Today)
-        return d
-    }).reverse() // Today first
+    const [showCashFlow, setShowCashFlow] = useState(false)
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
 
     // Filter transactions based on date settings
     const filteredTransactions = useMemo(() => transactions.filter(transaction => {
@@ -163,9 +164,10 @@ export default function SuperAdminPage() {
         fetchTransactions()
     }, [])
 
-    // With no range, pulls the last 4 days (enough for the quick-date badges).
-    // With a range, queries Supabase directly for that window so history
-    // older than 4 days back is actually available, not just filtered away.
+    // With no range, pulls the last few days (covers "today"). With a range
+    // (also used for a single picked date, from === to), queries Supabase
+    // directly for that window so history further back is actually
+    // available, not just filtered away.
     const fetchTransactions = async (range?: { from: string; to: string }) => {
         setLoading(true)
         try {
@@ -196,10 +198,24 @@ export default function SuperAdminPage() {
         fetchTransactions({ from: dateFrom, to: dateTo })
     }
 
-    const switchToQuickMode = () => {
-        setDateMode('quick')
+    const switchToTodayMode = () => {
+        setDateMode('today')
         setSelectedDateFilter(new Date().toDateString())
         fetchTransactions()
+    }
+
+    const switchToPickMode = () => {
+        const iso = pickedDate || toISODate(new Date())
+        setDateMode('pick')
+        setPickedDate(iso)
+        setSelectedDateFilter(new Date(`${iso}T00:00:00`).toDateString())
+        fetchTransactions({ from: iso, to: iso })
+    }
+
+    const handlePickedDateChange = (iso: string) => {
+        setPickedDate(iso)
+        setSelectedDateFilter(new Date(`${iso}T00:00:00`).toDateString())
+        fetchTransactions({ from: iso, to: iso })
     }
 
     const switchToRangeMode = () => {
@@ -210,13 +226,24 @@ export default function SuperAdminPage() {
     const handleRefresh = () => {
         if (dateMode === 'range' && dateFrom && dateTo) {
             fetchTransactions({ from: dateFrom, to: dateTo })
+        } else if (dateMode === 'pick' && pickedDate) {
+            fetchTransactions({ from: pickedDate, to: pickedDate })
         } else {
             fetchTransactions()
         }
     }
 
+    // Single date fed to the cash-flow section below so it never shows its
+    // own separate date picker — "today" mode uses today, "pick" mode uses
+    // the chosen day, "range" mode uses the end of the range (most recent).
+    const cashFlowDate = dateMode === 'pick' && pickedDate
+        ? pickedDate
+        : dateMode === 'range' && dateTo
+            ? dateTo
+            : toISODate(new Date())
+
     const grandTotal = branchSummaries.reduce((sum, branch) => sum + branch.netTotalTHB, 0)
-    const totalBuyingAmount = branchSummaries.reduce((sum, branch) => sum + branch.buyingTotal, 0)
+    const totalBuyingTransactions = branchSummaries.reduce((sum, branch) => sum + branch.buyingCount, 0)
 
     // Calculate overall currency summary across all branches
     const overallCurrencySummary = new Map<string, CurrencySummary>()
@@ -259,24 +286,30 @@ export default function SuperAdminPage() {
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
                 <div className="bg-white rounded-xl shadow-lg border-2 border-gray-200 p-4 md:p-6 mb-4 md:mb-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <div>
-                            <h1 className="text-xl md:text-3xl font-bold text-gray-900">Super Admin Dashboard</h1>
-                            <p className="text-xs md:text-sm text-gray-500 mt-0.5">ภาพรวมทุกสาขา · All Branch Summary</p>
-                        </div>
-                        <img src="Ex_logo_6.png" alt="App Icon" className="h-12 md:h-16" />
+                    <div className="mb-4">
+                        <h1 className="text-xl md:text-3xl font-bold text-gray-900">Super Admin Dashboard</h1>
+                        <p className="text-xs md:text-sm text-gray-500 mt-0.5">ภาพรวมทุกสาขา · All Branch Summary</p>
                     </div>
 
                     {/* Date Filter */}
                     <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
-                        {/* Mode Switch: quick-pick days vs. custom range */}
+                        {/* Mode Switch: today / a specific date / a custom range —
+                            the single source of truth for the whole page, including
+                            the cash-flow section below (see cashFlowDate). */}
                         <div className="inline-flex items-center gap-0.5 p-1 bg-gray-100 rounded-full self-start shrink-0">
                             <button
-                                onClick={switchToQuickMode}
-                                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${dateMode === 'quick' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                                onClick={switchToTodayMode}
+                                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${dateMode === 'today' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                                     }`}
                             >
-                                รายวัน
+                                วันนี้
+                            </button>
+                            <button
+                                onClick={switchToPickMode}
+                                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${dateMode === 'pick' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                                    }`}
+                            >
+                                เลือกวันที่
                             </button>
                             <button
                                 onClick={switchToRangeMode}
@@ -287,29 +320,17 @@ export default function SuperAdminPage() {
                             </button>
                         </div>
 
-                        {dateMode === 'quick' ? (
-                            <div className="flex items-center gap-2 flex-wrap">
-                                {availableDates.map((date) => {
-                                    const dateStr = date.toDateString()
-                                    const isSelected = selectedDateFilter === dateStr
-                                    const isToday = new Date().toDateString() === dateStr
-                                    const label = `${date.getDate()}/${date.getMonth() + 1}${isToday ? ' (Today)' : ''}`
+                        {dateMode === 'pick' && (
+                            <input
+                                type="date"
+                                value={pickedDate}
+                                max={toISODate(new Date())}
+                                onChange={(e) => handlePickedDateChange(e.target.value)}
+                                className="px-3 py-1.5 md:py-2 border-2 border-gray-300 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                            />
+                        )}
 
-                                    return (
-                                        <button
-                                            key={dateStr}
-                                            onClick={() => setSelectedDateFilter(isSelected ? null : dateStr)}
-                                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border transform active:scale-95 ${isSelected
-                                                ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                                                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                                                }`}
-                                        >
-                                            {label}
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        ) : (
+                        {dateMode === 'range' && (
                             <div className="flex items-center gap-2 md:gap-3 flex-wrap">
                                 <input
                                     type="date"
@@ -348,6 +369,21 @@ export default function SuperAdminPage() {
                     </div>
                 </div>
 
+                {/* Daily Cash Flow — collapsed by default, one shared spot for this
+                    across the app (was duplicated on /root and /root/daily before).
+                    Its own header doubles as the expand/collapse trigger, so
+                    there's no separate wrapper repeating the same title. */}
+                <div className="mb-4 md:mb-6">
+                    <DailyCashFlow
+                        transactions={transactions}
+                        date={cashFlowDate}
+                        notify={(message, type) => setToast({ message, type })}
+                        isRoot
+                        collapsed={!showCashFlow}
+                        onToggleCollapsed={() => setShowCashFlow(v => !v)}
+                    />
+                </div>
+
                 {filteredTransactions.length === 0 ? (
                     <div className="bg-white rounded-xl shadow-lg border-2 border-gray-200 p-12 text-center">
                         <div className="text-gray-300 mb-3">
@@ -364,7 +400,7 @@ export default function SuperAdminPage() {
                         <div className="grid grid-cols-2 gap-3 md:gap-4 mb-4 md:mb-6">
                             <KpiCard
                                 label="Buying Transactions"
-                                value={`฿${formatCurrency(totalBuyingAmount)}`}
+                                value={totalBuyingTransactions.toString()}
                                 accent="green"
                             />
                             <KpiCard
@@ -420,6 +456,14 @@ export default function SuperAdminPage() {
                     </>
                 )}
             </div>
+
+            {toast && (
+                <Toast
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast(null)}
+                />
+            )}
         </div>
     )
 }

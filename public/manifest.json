@@ -2,7 +2,7 @@
   "name": "Peter Exchange",
   "short_name": "PeterEx",
   "description": "Currency exchange rate management system",
-  "start_url": "/",
+  "start_url": "/admin2025",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2563eb",
