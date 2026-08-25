@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getTransactions, updateTransaction, deleteTransaction } from '../lib/api'
+import { getTransactions, getDailySales, updateTransaction, deleteTransaction, type DailySalesRow } from '../lib/api'
 import type { Transaction } from '../utils/currencyUtils'
 import RootTransactionTable from './root_component/RootTransactionTable'
 import TransactionForm from './system_component/TransactionForm'
@@ -9,8 +9,15 @@ import { calculateExchangeTotal } from '../utils/currencyUtils'
 import ClientTimeAnalytics from './root_component/ClientTimeAnalytics'
 import DailySalesAnalytics from './root_component/DailySalesAnalytics'
 
+// The raw ledger below the charts is a "what happened recently" tool, so it
+// loads a fixed recent window instead of the whole selected range — a year of
+// raw rows is ~3 MB and would stall the page on a phone. The charts read the
+// server-side daily roll-up instead, which covers the full range for ~40 KB.
+const RAW_WINDOW_DAYS = 31
+
 export default function RootPage() {
     const [transactions, setTransactions] = useState<Transaction[]>([])
+    const [dailySales, setDailySales] = useState<DailySalesRow[]>([])
     const [loading, setLoading] = useState(true)
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
     const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null) // Default to All (within range)
@@ -38,16 +45,24 @@ export default function RootPage() {
     const fetchTransactions = async () => {
         setLoading(true)
         try {
-            // Calculate the start date based on the selected range
-            const d = new Date()
-            d.setDate(d.getDate() - rangeDays)
-            const startDate = d.toISOString()
+            // Charts: daily totals across the whole selected range (cheap)
+            const summaryStart = new Date()
+            summaryStart.setDate(summaryStart.getDate() - rangeDays)
 
-            const data = await getTransactions(startDate)
-            setTransactions(data)
+            // Raw ledger: only the recent window (see RAW_WINDOW_DAYS)
+            const rawStart = new Date()
+            rawStart.setDate(rawStart.getDate() - Math.min(rangeDays, RAW_WINDOW_DAYS))
+
+            const [summary, rows] = await Promise.all([
+                getDailySales(summaryStart.toISOString()),
+                getTransactions(rawStart.toISOString()),
+            ])
+
+            setDailySales(summary)
+            setTransactions(rows)
         } catch (error) {
             console.error('Error fetching transactions:', error)
-            setToast({ message: 'Failed to fetch transactions', type: 'error' })
+            setToast({ message: 'โหลดข้อมูลไม่สำเร็จ', type: 'error' })
         } finally {
             setLoading(false)
         }
@@ -121,15 +136,20 @@ export default function RootPage() {
             <div className="flex-1 p-4 sm:p-6 w-full mx-auto space-y-5">
                 <h1 className="font-display text-xl font-bold" style={{ color: 'var(--vault-paper)' }}>ภาพรวม</h1>
 
-                {/* Daily Sales per Branch (uses full range data, has its own branch filter) */}
+                {/* Daily Sales per Branch (server-side daily totals for the whole
+                    range, its own branch filter, raw rows fetched per opened day) */}
                 <DailySalesAnalytics
-                    transactions={transactions}
+                    daily={dailySales}
                     rangeDays={rangeDays}
                     setRangeDays={setRangeDays}
+                    loading={loading}
                 />
 
                 {/* Client Analytics Graph */}
-                <ClientTimeAnalytics transactions={filteredTransactions} />
+                <ClientTimeAnalytics
+                    transactions={filteredTransactions}
+                    windowLabel={rangeDays > RAW_WINDOW_DAYS ? `${RAW_WINDOW_DAYS} วันล่าสุด` : undefined}
+                />
 
                 {/* All transactions — collapsed by default. /root/daily already covers
                     the common "look at one day" case with a friendlier layout, so this
@@ -148,7 +168,9 @@ export default function RootPage() {
                             <span className="flex-1 min-w-0">
                                 <span className="block font-display text-sm font-bold" style={{ color: 'var(--vault-paper)' }}>รายการธุรกรรมทั้งหมด</span>
                                 <span className="block text-xs mt-0.5" style={{ color: 'var(--vault-muted)' }}>
-                                    {filteredTransactions.length} รายการ · {showAllTransactions ? 'กำลังแสดงอยู่ — แตะเพื่อซ่อน' : 'แตะเพื่อค้นหา/ดูตารางแบบละเอียด'}
+                                    {filteredTransactions.length} รายการ
+                                    {rangeDays > RAW_WINDOW_DAYS && ` (${RAW_WINDOW_DAYS} วันล่าสุด)`}
+                                    {' · '}{showAllTransactions ? 'กำลังแสดงอยู่ — แตะเพื่อซ่อน' : 'แตะเพื่อค้นหา/ดูตารางแบบละเอียด'}
                                 </span>
                             </span>
                         </button>

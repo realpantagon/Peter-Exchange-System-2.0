@@ -13,6 +13,8 @@ import type { Transaction } from '../../utils/currencyUtils'
 
 interface ClientTimeAnalyticsProps {
     transactions: Transaction[]
+    /** What the passed transactions actually cover, e.g. '31 วันล่าสุด'. */
+    windowLabel?: string
 }
 
 const HOURS = [
@@ -20,7 +22,7 @@ const HOURS = [
     '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'
 ]
 
-export default function ClientTimeAnalytics({ transactions }: ClientTimeAnalyticsProps) {
+export default function ClientTimeAnalytics({ transactions, windowLabel }: ClientTimeAnalyticsProps) {
     const data = useMemo(() => {
         // Initialize counts for each hour slot
         const hourCounts: { [key: string]: number } = {}
@@ -61,7 +63,9 @@ export default function ClientTimeAnalytics({ transactions }: ClientTimeAnalytic
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     ช่วงเวลาที่ลูกค้าเข้าใช้บริการ
-                    <span className="text-xs font-normal" style={{ color: 'var(--vault-muted)' }}>· 09:00–21:00</span>
+                    <span className="text-xs font-normal" style={{ color: 'var(--vault-muted)' }}>
+                        · 09:00–21:00{windowLabel ? ` · ${windowLabel}` : ''}
+                    </span>
                 </h3>
                 {maxClients > 0 && (
                     <span className="font-figure text-xs" style={{ color: 'var(--vault-muted)' }}>

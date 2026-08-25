@@ -221,6 +221,37 @@ api.get('/transactions', async (c) => {
   return c.json(results);
 });
 
+// Daily sales roll-up, one row per (day, branch). The dashboard charts up to a
+// year at a time; that is ~11k rows / ~3 MB of raw ledger for numbers the client
+// would immediately add up and throw away, which is far too much to push to a
+// phone. Aggregating here turns a year into ~700 rows (~40 KB).
+//
+// created_at is UTC ISO; the shop reads its days in Bangkok time, so the bucket
+// is shifted by +7h before the date is taken.
+const SHOP_TZ_SHIFT = '+7 hours';
+
+api.get('/summary/daily', async (c) => {
+  const { from, to, branch } = c.req.query();
+
+  const where = ['branch IS NOT NULL'];
+  const binds = [];
+  if (from) { where.push('created_at >= ?'); binds.push(from); }
+  if (to) { where.push('created_at <= ?'); binds.push(to); }
+  if (branch) { where.push('branch = ?'); binds.push(branch); }
+
+  const sql = `SELECT date(created_at, '${SHOP_TZ_SHIFT}') AS day,
+                      branch,
+                      SUM(COALESCE(total_thb, 0)) AS total,
+                      COUNT(*) AS count
+               FROM transactions
+               WHERE ${where.join(' AND ')}
+               GROUP BY day, branch
+               ORDER BY day`;
+
+  const { results } = await c.env.DB.prepare(sql).bind(...binds).all();
+  return c.json(results);
+});
+
 api.post('/transactions', zValidator('json', txnBody), async (c) => {
   const body = c.req.valid('json');
   const row = await c.env.DB.prepare(

@@ -154,6 +154,32 @@ export const updateRate = async (id: number, rate: string): Promise<void> => {
 
 // --- Transaction Services ---
 
+/** One day of sales for one branch, already summed by the Worker. */
+export interface DailySalesRow {
+    day: string      // 'YYYY-MM-DD' in shop-local (Bangkok) time
+    branch: string
+    total: number    // THB
+    count: number    // number of transactions
+}
+
+/**
+ * Daily sales roll-up for a date range. Use this instead of getTransactions()
+ * whenever the screen only needs totals — a year of raw rows is ~3 MB, the same
+ * year of daily sums is ~40 KB, which is the difference between a dashboard that
+ * loads on a phone and one that appears to have no history at all.
+ */
+export const getDailySales = async (startDate?: string, endDate?: string, branchId?: string): Promise<DailySalesRow[]> => {
+    try {
+        const rows = await request<{ day: string; branch: string; total: number | null; count: number }[]>('/summary/daily', {
+            query: { from: startDate, to: endDate, branch: branchId },
+        })
+        return rows.map(r => ({ day: r.day, branch: r.branch, total: Number(r.total) || 0, count: r.count }))
+    } catch (error) {
+        console.error('Error fetching daily sales summary:', error)
+        throw error
+    }
+}
+
 export const getTransactions = async (startDate?: string, branchId?: string, endDate?: string): Promise<PeterExchangeTransaction[]> => {
     try {
         const rows = await request<TransactionRow[]>('/transactions', {
