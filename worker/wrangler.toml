@@ -1,0 +1,12 @@
+name = "peter-exchange"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+# account_id = "your-cloudflare-account-id"  # set via CLOUDFLARE_ACCOUNT_ID env or wrangler login
+
+[[d1_databases]]
+binding = "DB"
+database_name = "peter-exchange"
+database_id = "622c3e5b-1d3c-4dde-bfc9-c0d7042d6262"
+
+[triggers]
+crons = ["0 2 * * *"]
