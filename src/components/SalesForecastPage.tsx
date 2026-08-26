@@ -161,10 +161,10 @@ export default function SalesForecastPage() {
                                             style={{ backgroundColor: isPeak ? 'var(--vault-brass-tint)' : 'var(--vault-panel)', border: `1px solid ${isPeak ? 'var(--vault-brass-border)' : 'var(--vault-hairline)'}` }}>
                                             <div className="flex items-baseline justify-between gap-1">
                                                 <span className="text-sm font-bold" style={{ color: isPeak ? 'var(--vault-brass)' : 'var(--vault-paper)' }}>
-                                                    {DOW_FULL[f.dow].slice(0, 2)}
-                                                    {i === 0 && <span className="ml-1 text-[9px] font-bold px-1 py-px rounded" style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}>พรุ่งนี้</span>}
+                                                    {DOW_FULL[f.dow]}
+                                                    {i === 0 && <span className="ml-1 text-[9px] font-bold px-1 py-px rounded align-middle" style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}>พรุ่งนี้</span>}
                                                 </span>
-                                                <span className="text-[11px] font-figure" style={{ color: 'var(--vault-muted)' }}>{shortDay(f.day)}</span>
+                                                <span className="text-[11px] font-figure shrink-0" style={{ color: 'var(--vault-muted)' }}>{shortDay(f.day)}</span>
                                             </div>
                                             <div className="font-figure text-lg font-bold tabular-nums mt-2" style={{ color: 'var(--vault-paper)' }}>{compact(f.predicted)}</div>
                                             <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--vault-hairline)' }}>
