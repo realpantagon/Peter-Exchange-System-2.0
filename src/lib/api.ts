@@ -210,6 +210,18 @@ export const getRateForecastFor = async (code: string, window = 30): Promise<Rat
     return request<RateForecast>('/rate-forecast', { query: { code, window: String(window) } })
 }
 
+/** How close past suggestions were to the rate we actually gave. */
+export interface ForecastAccuracy {
+    code: string
+    n: number             // days compared
+    mae: number | null    // mean absolute error (฿)
+    bias: number | null   // mean signed error (+ = suggested too high)
+}
+
+export const getForecastAccuracyFor = async (code: string, window = 30): Promise<ForecastAccuracy> => {
+    return request<ForecastAccuracy>('/forecast-accuracy', { query: { code, window: String(window) } })
+}
+
 // --- Transaction Services ---
 
 /** One day of sales for one branch, already summed by the Worker. */

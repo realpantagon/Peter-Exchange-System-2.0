@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceDot,
 } from 'recharts'
-import { getRates, getRateHistory, getRateForecastFor, type RateHistoryRow, type RateForecast } from '../lib/api'
+import { getRates, getRateHistory, getRateForecastFor, getForecastAccuracyFor, type RateHistoryRow, type RateForecast, type ForecastAccuracy } from '../lib/api'
 import type { PeterExchangeRate } from '../types/database'
 import Spinner from './Spinner'
 
@@ -56,6 +56,7 @@ export default function RateHistoryPage() {
     const [rangeDays, setRangeDays] = useState<number>(30)
     const [rows, setRows] = useState<RateHistoryRow[]>([])
     const [forecast, setForecast] = useState<RateForecast | null>(null)
+    const [accuracy, setAccuracy] = useState<ForecastAccuracy | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(false)
     const isMobile = useIsMobile()
@@ -67,13 +68,16 @@ export default function RateHistoryPage() {
             .catch(() => {/* selector falls back to just USD */ })
     }, [])
 
-    // Suggested rate to set today for the selected currency
+    // Suggested rate to set today + how accurate past suggestions have been
     useEffect(() => {
         let cancelled = false
-        setForecast(null)
+        setForecast(null); setAccuracy(null)
         getRateForecastFor(code, 30)
             .then(f => { if (!cancelled) setForecast(f) })
             .catch(() => { if (!cancelled) setForecast(null) })
+        getForecastAccuracyFor(code, 30)
+            .then(a => { if (!cancelled) setAccuracy(a) })
+            .catch(() => { if (!cancelled) setAccuracy(null) })
         return () => { cancelled = true }
     }, [code])
 
@@ -181,6 +185,21 @@ export default function RateHistoryPage() {
                             − margin จากเรทต่ำสุดของเรา {forecast.avg_margin != null ? formatRate(forecast.avg_margin) : '—'}<br />
                             <span className="text-[10px]">(ถ่วงน้ำหนักวันล่าสุด · {forecast.samples} วัน)</span>
                         </div>
+                    </div>
+                )}
+
+                {/* Forecast accuracy — how close past suggestions were to reality */}
+                {accuracy && accuracy.n > 0 && accuracy.mae != null && (
+                    <div className="rounded-2xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2 text-sm" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>
+                        <span style={{ color: 'var(--vault-muted)' }}>🎯 ความแม่นของ forecast <span className="text-xs">(เทียบเรทที่แลกจริง · {accuracy.n} วัน)</span></span>
+                        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                            <span style={{ color: 'var(--vault-paper)' }}>พลาดเฉลี่ย <b className="font-figure">±{formatRate(accuracy.mae)}</b> บาท</span>
+                            {accuracy.bias != null && Math.abs(accuracy.bias) >= 0.001 && (
+                                <span style={{ color: accuracy.bias > 0 ? '#2563eb' : '#dc2626' }}>
+                                    มักแนะนำ{accuracy.bias > 0 ? 'สูงไป +' : 'ต่ำไป −'}{formatRate(Math.abs(accuracy.bias))}
+                                </span>
+                            )}
+                        </span>
                     </div>
                 )}
 

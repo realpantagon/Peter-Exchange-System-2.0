@@ -360,141 +360,201 @@ api.get('/superrich/latest', async (c) => {
   return c.json(results);
 });
 
-// Suggested rate to set today, per currency:
-//   suggested = Super Rich buying today − our usual margin
-// The margin is the gap between Super Rich buying and OUR LOWEST rate that day
-// (transactions), recency-weighted over the last `window` days so recent pricing
-// dominates (half-life 7 days). Also returns a short-term Super Rich trend.
+// ---- Forecast core ----------------------------------------------------------
+// suggested = Super Rich buying (that day) − our usual margin, where the margin is
+// the gap between Super Rich buying and OUR LOWEST rate each day (outlier-filtered),
+// recency-weighted toward the reference day.
 const MARGIN_HALF_LIFE_DAYS = 4;   // recency weight halves every N days
 const DAY_OUTLIER_BAND = 0.06;     // per day, ignore rates >6% from that day's median
 const MARGIN_MAD_K = 3;            // drop days whose margin is >3·MAD from the median margin
 
-api.get('/rate-forecast', async (c) => {
-  const code = c.req.query('code');
-  const window = Math.min(Math.max(parseInt(c.req.query('window') || '30', 10) || 30, 7), 365);
-  const windowMod = `-${window} days`;
+const _median = (a) => {
+  if (!a.length) return null;
+  const s = [...a].sort((x, y) => x - y);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+// The typical LOW rate that day, ignoring rates far from the day's median.
+const _robustLow = (rates) => {
+  const med = _median(rates);
+  if (med === null) return null;
+  const lo = med * (1 - DAY_OUTLIER_BAND), hi = med * (1 + DAY_OUTLIER_BAND);
+  let kept = rates.filter(r => r >= lo && r <= hi);
+  if (!kept.length) kept = rates;
+  return Math.min(...kept);
+};
 
-  // Latest Super Rich buying per code (from the most recent scrape).
+const shopToday = () => new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+
+// asOf: the shop day (YYYY-MM-DD) the forecast is "made on"; defaults to today.
+async function computeForecast(env, { code, window = 30, asOf } = {}) {
+  const w = Math.min(Math.max(parseInt(window, 10) || 30, 7), 365);
+  const windowMod = `-${w} days`;
+  const ref = asOf || shopToday();
+
   const latestWhere = code ? 'AND code = ?' : '';
-  const latest = await c.env.DB.prepare(
-    `SELECT code, buying AS sr_buying FROM superrich_rates
-     WHERE scraped_at = (SELECT MAX(scraped_at) FROM superrich_rates) ${latestWhere}`
-  ).bind(...(code ? [code] : [])).all();
+  const latest = await env.DB.prepare(
+    `SELECT code, buying AS sr_buying FROM superrich_rates WHERE created_date = ? ${latestWhere}`
+  ).bind(...(code ? [ref, code] : [ref])).all();
 
-  // Pull the raw rates we gave (per code/day) and Super Rich buying per day, then
-  // compute the margin in JS so outliers can be stripped — one cheap small-bill
-  // exchange must not drag the whole suggestion down.
   const codeFilter = code ? 'AND currency_code = ?' : '';
-  const rateRows = await c.env.DB.prepare(
+  const rateRows = await env.DB.prepare(
     `SELECT currency_code AS code, date(created_at, '${SHOP_TZ_SHIFT}') AS day, rate
      FROM transactions
-     WHERE rate IS NOT NULL AND date(created_at, '${SHOP_TZ_SHIFT}') >= date('now', '+7 hours', ?) ${codeFilter}`
-  ).bind(...(code ? [windowMod, code] : [windowMod])).all();
+     WHERE rate IS NOT NULL
+       AND date(created_at, '${SHOP_TZ_SHIFT}') >= date(?, ?)
+       AND date(created_at, '${SHOP_TZ_SHIFT}') <= ? ${codeFilter}`
+  ).bind(...(code ? [ref, windowMod, ref, code] : [ref, windowMod, ref])).all();
 
   const srDayFilter = code ? 'AND code = ?' : '';
-  const srRows = await c.env.DB.prepare(
-    `SELECT code, created_date AS day, buying AS sr_buying
-     FROM superrich_rates
-     WHERE created_date >= date('now', '+7 hours', ?) ${srDayFilter}`
-  ).bind(...(code ? [windowMod, code] : [windowMod])).all();
+  const srRows = await env.DB.prepare(
+    `SELECT code, created_date AS day, buying AS sr_buying FROM superrich_rates
+     WHERE created_date >= date(?, ?) AND created_date <= ? ${srDayFilter}`
+  ).bind(...(code ? [ref, windowMod, ref, code] : [ref, windowMod, ref])).all();
 
-  const ratesByCodeDay = new Map(); // code -> Map(day -> number[])
+  const ratesByCodeDay = new Map();
   for (const r of rateRows.results) {
     if (!ratesByCodeDay.has(r.code)) ratesByCodeDay.set(r.code, new Map());
     const dm = ratesByCodeDay.get(r.code);
     if (!dm.has(r.day)) dm.set(r.day, []);
     dm.get(r.day).push(r.rate);
   }
-  const srByCodeDay = new Map(); // code -> Map(day -> sr_buying)
+  const srByCodeDay = new Map();
   for (const r of srRows.results) {
     if (!srByCodeDay.has(r.code)) srByCodeDay.set(r.code, new Map());
     srByCodeDay.get(r.code).set(r.day, r.sr_buying);
   }
 
-  const median = (a) => {
-    if (!a.length) return null;
-    const s = [...a].sort((x, y) => x - y);
-    const m = Math.floor(s.length / 2);
-    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-  };
-  // The typical LOW rate that day, ignoring rates far from the day's median.
-  const robustLow = (rates) => {
-    const med = median(rates);
-    if (med === null) return null;
-    const lo = med * (1 - DAY_OUTLIER_BAND), hi = med * (1 + DAY_OUTLIER_BAND);
-    let kept = rates.filter(r => r >= lo && r <= hi);
-    if (!kept.length) kept = rates;
-    return Math.min(...kept);
-  };
-
-  const todayStr = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
-  const ageDays = (day) => Math.max(0, Math.round((Date.parse(todayStr) - Date.parse(day)) / 86400000));
+  const ageDays = (day) => Math.max(0, Math.round((Date.parse(ref) - Date.parse(day)) / 86400000));
 
   const marginByCode = new Map();
   for (const [cd, dayMap] of ratesByCodeDay) {
     const srDays = srByCodeDay.get(cd);
     if (!srDays) continue;
-
     let daily = [];
     for (const [day, rates] of dayMap) {
       const sr = srDays.get(day);
       if (sr === undefined || sr === null) continue;
-      const low = robustLow(rates);
+      const low = _robustLow(rates);
       if (low === null) continue;
       daily.push({ age: ageDays(day), margin: sr - low });
     }
     if (!daily.length) continue;
-
-    // Drop day-level margin outliers (median/MAD filter).
     if (daily.length >= 4) {
-      const mMed = median(daily.map(d => d.margin));
-      const mad = median(daily.map(d => Math.abs(d.margin - mMed))) || 0;
+      const mMed = _median(daily.map(d => d.margin));
+      const mad = _median(daily.map(d => Math.abs(d.margin - mMed))) || 0;
       if (mad > 0) daily = daily.filter(d => Math.abs(d.margin - mMed) <= MARGIN_MAD_K * mad);
     }
-
-    // Recency-weighted mean margin.
     let wsum = 0, msum = 0;
     for (const d of daily) {
-      const w = Math.pow(0.5, d.age / MARGIN_HALF_LIFE_DAYS);
-      wsum += w; msum += w * d.margin;
+      const wt = Math.pow(0.5, d.age / MARGIN_HALF_LIFE_DAYS);
+      wsum += wt; msum += wt * d.margin;
     }
     marginByCode.set(cd, { avgMargin: wsum > 0 ? msum / wsum : null, samples: daily.length });
   }
 
-  // Super Rich 7-day average per code, for a simple up/down/flat trend hint.
   const trendWhere = code ? 'AND code = ?' : '';
-  const trend = await c.env.DB.prepare(
+  const trend = await env.DB.prepare(
     `SELECT code, AVG(buying) AS sr_avg7 FROM superrich_rates
-     WHERE created_date >= date('now', '+7 hours', '-7 days') ${trendWhere} GROUP BY code`
-  ).bind(...(code ? [code] : [])).all();
-
+     WHERE created_date >= date(?, '-7 days') AND created_date < ? ${trendWhere} GROUP BY code`
+  ).bind(...(code ? [ref, ref, code] : [ref, ref])).all();
   const trendByCode = new Map(trend.results.map(r => [r.code, r.sr_avg7]));
 
-  const out = latest.results.map(r => {
+  return latest.results.map(r => {
     const m = marginByCode.get(r.code);
     const avgMargin = m ? m.avgMargin : null;
     const samples = m ? m.samples : 0;
     const suggested = (r.sr_buying !== null && avgMargin !== null)
-      ? Math.round((r.sr_buying - avgMargin) * 1e4) / 1e4
-      : null;
+      ? Math.round((r.sr_buying - avgMargin) * 1e4) / 1e4 : null;
     const avg7 = trendByCode.get(r.code);
     let sr_trend = null;
     if (r.sr_buying !== null && avg7 !== null && avg7 !== undefined) {
       const diff = r.sr_buying - avg7;
-      const eps = Math.abs(avg7) * 0.001; // 0.1% dead-band
+      const eps = Math.abs(avg7) * 0.001;
       sr_trend = diff > eps ? 'up' : diff < -eps ? 'down' : 'flat';
     }
     return {
       code: r.code,
       sr_buying: r.sr_buying,
       avg_margin: avgMargin === null ? null : Math.round(avgMargin * 1e4) / 1e4,
-      samples,
-      suggested,
-      sr_trend,
+      samples, suggested, sr_trend,
     };
   });
+}
 
+// Persist the forecast for one day (default today) into rate_forecast_log.
+async function snapshotForecast(env, asOf) {
+  const ref = asOf || shopToday();
+  const rows = await computeForecast(env, { asOf: ref });
+  if (!rows.length) return { forecast_date: ref, saved: 0 };
+  await env.DB.batch(rows.map(r =>
+    env.DB.prepare(
+      `INSERT INTO rate_forecast_log (forecast_date, code, sr_buying, avg_margin, suggested, samples, sr_trend)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(forecast_date, code) DO UPDATE SET
+         sr_buying = excluded.sr_buying, avg_margin = excluded.avg_margin,
+         suggested = excluded.suggested, samples = excluded.samples, sr_trend = excluded.sr_trend`
+    ).bind(ref, r.code, r.sr_buying, r.avg_margin, r.suggested, r.samples, r.sr_trend)
+  ));
+  return { forecast_date: ref, saved: rows.length };
+}
+
+api.get('/rate-forecast', async (c) => {
+  const code = c.req.query('code');
+  const out = await computeForecast(c.env, { code, window: c.req.query('window') });
   return c.json(code ? (out[0] ?? { code, sr_buying: null, avg_margin: null, samples: 0, suggested: null, sr_trend: null }) : out);
+});
+
+// How close past suggestions were to the rate we actually gave (robust low), per
+// currency: mae = mean absolute error, bias = mean signed error (+ = suggested high).
+api.get('/forecast-accuracy', async (c) => {
+  const code = c.req.query('code');
+  const window = Math.min(Math.max(parseInt(c.req.query('window') || '30', 10) || 30, 7), 365);
+  const windowMod = `-${window} days`;
+  const ref = shopToday();
+
+  const fcWhere = code ? 'AND code = ?' : '';
+  const fc = await c.env.DB.prepare(
+    `SELECT forecast_date AS day, code, suggested FROM rate_forecast_log
+     WHERE suggested IS NOT NULL AND forecast_date >= date(?, ?) AND forecast_date <= ? ${fcWhere}`
+  ).bind(...(code ? [ref, windowMod, ref, code] : [ref, windowMod, ref])).all();
+
+  const codeFilter = code ? 'AND currency_code = ?' : '';
+  const rateRows = await c.env.DB.prepare(
+    `SELECT currency_code AS code, date(created_at, '${SHOP_TZ_SHIFT}') AS day, rate
+     FROM transactions WHERE rate IS NOT NULL
+       AND date(created_at, '${SHOP_TZ_SHIFT}') >= date(?, ?)
+       AND date(created_at, '${SHOP_TZ_SHIFT}') <= ? ${codeFilter}`
+  ).bind(...(code ? [ref, windowMod, ref, code] : [ref, windowMod, ref])).all();
+
+  const actualByCodeDay = new Map();
+  for (const r of rateRows.results) {
+    if (!actualByCodeDay.has(r.code)) actualByCodeDay.set(r.code, new Map());
+    const dm = actualByCodeDay.get(r.code);
+    if (!dm.has(r.day)) dm.set(r.day, []);
+    dm.get(r.day).push(r.rate);
+  }
+
+  const byCode = new Map();
+  for (const row of fc.results) {
+    const dm = actualByCodeDay.get(row.code);
+    const rates = dm && dm.get(row.day);
+    if (!rates || !rates.length) continue;
+    const actual = _robustLow(rates);
+    if (actual === null) continue;
+    const err = row.suggested - actual;
+    const e = byCode.get(row.code) || { code: row.code, n: 0, absSum: 0, errSum: 0 };
+    e.n += 1; e.absSum += Math.abs(err); e.errSum += err;
+    byCode.set(row.code, e);
+  }
+
+  const out = [...byCode.values()].map(e => ({
+    code: e.code, n: e.n,
+    mae: Math.round((e.absSum / e.n) * 1e4) / 1e4,
+    bias: Math.round((e.errSum / e.n) * 1e4) / 1e4,
+  })).sort((a, b) => (a.code < b.code ? -1 : 1));
+
+  return c.json(code ? (out[0] ?? { code, n: 0, mae: null, bias: null }) : out);
 });
 
 api.post('/transactions', zValidator('json', txnBody), async (c) => {
@@ -632,6 +692,20 @@ app.get('/stats', async (c) => {
   return c.json(row);
 });
 
+// Snapshot the forecast into rate_forecast_log. No range → today; from/to →
+// backfill each day's forecast as-of that day (used to seed accuracy history).
+app.get('/snapshot-forecast', async (c) => {
+  const { from, to } = c.req.query();
+  if (!from || !to) return c.json(await snapshotForecast(c.env));
+  let days = 0;
+  for (let d = new Date(from); d <= new Date(to); d.setDate(d.getDate() + 1)) {
+    const day = d.toISOString().slice(0, 10);
+    const r = await snapshotForecast(c.env, day);
+    if (r.saved) days++;
+  }
+  return c.json({ success: true, days });
+});
+
 app.onError((err, c) => {
   console.error(err);
   return c.json({ error: err.message }, 500);
@@ -641,6 +715,9 @@ export default {
   fetch: app.fetch,
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(scrapeToday(env));
+    ctx.waitUntil((async () => {
+      await scrapeToday(env);
+      await snapshotForecast(env); // record today's suggestion for accuracy tracking
+    })());
   },
 };
