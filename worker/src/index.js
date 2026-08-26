@@ -313,6 +313,36 @@ api.get('/rate-history', async (c) => {
   return c.json(merged);
 });
 
+// --- Super Rich reference rates ----------------------------------------------
+
+const superrichLatest = (env) =>
+  env.DB.prepare(
+    `SELECT code, buying, selling, scraped_at
+     FROM superrich_rates
+     WHERE scraped_at = (SELECT MAX(scraped_at) FROM superrich_rates)
+     ORDER BY code`
+  ).all();
+
+// Force a fresh scrape of today's Super Rich rates, then return the latest set.
+// If the scrape fails (e.g. the upstream API hiccups) the last stored rates are
+// still returned so the page keeps showing something.
+api.post('/superrich/refresh', async (c) => {
+  let scrape;
+  try {
+    scrape = await scrapeToday(c.env);
+  } catch (e) {
+    scrape = { success: false, error: e.message };
+  }
+  const { results } = await superrichLatest(c.env);
+  return c.json({ scrape, latest: results });
+});
+
+// Read the latest stored Super Rich rates without forcing a scrape.
+api.get('/superrich/latest', async (c) => {
+  const { results } = await superrichLatest(c.env);
+  return c.json(results);
+});
+
 api.post('/transactions', zValidator('json', txnBody), async (c) => {
   const body = c.req.valid('json');
   const row = await c.env.DB.prepare(

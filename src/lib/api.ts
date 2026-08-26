@@ -173,6 +173,25 @@ export const getRateHistory = async (code: string, from?: string, to?: string): 
     }
 }
 
+/** Latest Super Rich reference rate for one currency code. */
+export interface SuperrichRate {
+    code: string
+    buying: number | null
+    selling: number | null
+    scraped_at: string
+}
+
+/** Force a fresh scrape of today's Super Rich rates, then return the latest set. */
+export const refreshSuperrichRates = async (): Promise<SuperrichRate[]> => {
+    const res = await request<{ scrape: unknown; latest: SuperrichRate[] }>('/superrich/refresh', { method: 'POST' })
+    return res.latest
+}
+
+/** Latest stored Super Rich rates (no scrape). */
+export const getSuperrichLatest = async (): Promise<SuperrichRate[]> => {
+    return request<SuperrichRate[]>('/superrich/latest')
+}
+
 // --- Transaction Services ---
 
 /** One day of sales for one branch, already summed by the Worker. */

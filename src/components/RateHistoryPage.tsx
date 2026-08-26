@@ -154,7 +154,6 @@ export default function RateHistoryPage() {
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                     <StatTile label="Super Rich รับซื้อ (ล่าสุด)" value={formatRate(summary.latest?.sr_buying)} accent="#16A34A" />
                     <StatTile label="เรทเรา ต่ำสุด–สูงสุด (ช่วงนี้)" value={summary.ourLow !== null ? `${formatRate(summary.ourLow)} – ${formatRate(summary.ourHigh)}` : '—'} />
-                    <StatTile label="จำนวนรายการ (ช่วงนี้)" value={summary.totalTxns.toLocaleString('th-TH')} />
                 </div>
 
                 {/* Chart */}
