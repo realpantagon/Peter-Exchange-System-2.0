@@ -222,6 +222,21 @@ export const getForecastAccuracyFor = async (code: string, window = 30): Promise
     return request<ForecastAccuracy>('/forecast-accuracy', { query: { code, window: String(window) } })
 }
 
+// --- Sales Forecast ---
+
+export interface SalesForecast {
+    branch: string
+    level: number  // typical THB per day (deseasonalized, recency-weighted)
+    history: { day: string; total: number; count: number }[]
+    forecast: { day: string; dow: number; predicted: number; low: number; high: number }[]
+    weekday: { dow: number; name: string; factor: number; avg: number }[]
+    summary: { next7_total: number; avg_per_day: number }
+}
+
+export const getSalesForecast = async (branch?: string, horizon = 14): Promise<SalesForecast> => {
+    return request<SalesForecast>('/sales-forecast', { query: { branch, horizon: String(horizon) } })
+}
+
 // --- Transaction Services ---
 
 /** One day of sales for one branch, already summed by the Worker. */

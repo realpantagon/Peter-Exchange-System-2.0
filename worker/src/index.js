@@ -557,6 +557,88 @@ api.get('/forecast-accuracy', async (c) => {
   return c.json(code ? (out[0] ?? { code, n: 0, mae: null, bias: null }) : out);
 });
 
+// Sales forecast: predict daily THB sales for the next `horizon` days.
+// Model = deseasonalized LEVEL (recency-weighted, so it tracks the recent trend)
+// × WEEKDAY factor (exchange shops have a strong day-of-week pattern). Returns
+// history + forecast (with a ±1σ band) + the weekday profile.
+const DOW_TH = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+const dowOf = (ymd) => new Date(ymd + 'T00:00:00Z').getUTCDay();
+
+api.get('/sales-forecast', async (c) => {
+  const branch = c.req.query('branch');
+  const horizon = Math.min(Math.max(parseInt(c.req.query('horizon') || '14', 10) || 14, 1), 60);
+  const lookback = 90;
+  const ref = shopToday();
+
+  const where = ['branch IS NOT NULL',
+    `date(created_at, '${SHOP_TZ_SHIFT}') >= date(?, '-${lookback} days')`,
+    `date(created_at, '${SHOP_TZ_SHIFT}') <= ?`];
+  const binds = [ref, ref];
+  if (branch) { where.push('branch = ?'); binds.push(branch); }
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT date(created_at, '${SHOP_TZ_SHIFT}') AS day,
+            SUM(COALESCE(total_thb, 0)) AS total, COUNT(*) AS count
+     FROM transactions WHERE ${where.join(' AND ')} GROUP BY day ORDER BY day`
+  ).bind(...binds).all();
+
+  const history = results.map(r => ({ day: r.day, total: r.total, count: r.count }));
+  if (!history.length) {
+    return c.json({ branch: branch || 'all', level: 0, history: [], forecast: [], weekday: [], summary: { next7_total: 0, avg_per_day: 0 } });
+  }
+
+  const overallMean = history.reduce((a, h) => a + h.total, 0) / history.length;
+
+  // Weekday factor = that weekday's mean ÷ overall mean.
+  const byDow = Array.from({ length: 7 }, () => []);
+  history.forEach(h => byDow[dowOf(h.day)].push(h.total));
+  const factor = byDow.map(arr => (arr.length && overallMean > 0)
+    ? (arr.reduce((a, b) => a + b, 0) / arr.length) / overallMean : 1);
+
+  // Recency-weighted deseasonalized level (half-life 21 days).
+  const refT = Date.parse(ref);
+  let wsum = 0, lsum = 0;
+  for (const h of history) {
+    const f = factor[dowOf(h.day)] || 1;
+    if (f <= 0) continue;
+    const age = Math.max(0, Math.round((refT - Date.parse(h.day)) / 86400000));
+    const w = Math.pow(0.5, age / 21);
+    wsum += w; lsum += w * (h.total / f);
+  }
+  const level = wsum > 0 ? lsum / wsum : overallMean;
+
+  // ±1σ band from the fit residuals.
+  let sq = 0;
+  for (const h of history) { const exp = level * (factor[dowOf(h.day)] || 1); sq += (h.total - exp) ** 2; }
+  const std = history.length > 1 ? Math.sqrt(sq / history.length) : 0;
+
+  const forecast = [];
+  for (let i = 1; i <= horizon; i++) {
+    const d = new Date(refT + i * 86400000).toISOString().slice(0, 10);
+    const pred = Math.max(0, level * (factor[dowOf(d)] || 1));
+    forecast.push({
+      day: d, dow: dowOf(d),
+      predicted: Math.round(pred),
+      low: Math.round(Math.max(0, pred - std)),
+      high: Math.round(pred + std),
+    });
+  }
+
+  const next7 = forecast.slice(0, 7).reduce((a, b) => a + b.predicted, 0);
+  const weekday = factor.map((f, i) => ({
+    dow: i, name: DOW_TH[i],
+    factor: Math.round(f * 100) / 100,
+    avg: Math.round(level * f),
+  }));
+
+  return c.json({
+    branch: branch || 'all',
+    level: Math.round(level),
+    history, forecast, weekday,
+    summary: { next7_total: Math.round(next7), avg_per_day: Math.round(next7 / 7) },
+  });
+});
+
 api.post('/transactions', zValidator('json', txnBody), async (c) => {
   const body = c.req.valid('json');
   const row = await c.env.DB.prepare(

@@ -8,6 +8,7 @@ import AdminLayout from './components/AdminLayout'
 import RootPage from './components/RootPage'
 import DailyDetailPage from './components/DailyDetailPage'
 import RateHistoryPage from './components/RateHistoryPage'
+import SalesForecastPage from './components/SalesForecastPage'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route element={<AdminLayout />}>
           <Route path="/admin2025" element={<AdminPage />} />
           <Route path="/rate-history" element={<RateHistoryPage />} />
+          <Route path="/sales-forecast" element={<SalesForecastPage />} />
           <Route path="/superadmin2025" element={<SuperAdminPage />} />
           <Route path="/root" element={<RootPage />} />
           <Route path="/root/daily" element={<DailyDetailPage />} />
