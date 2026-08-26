@@ -113,14 +113,14 @@ export default function AdminPage() {
         {/* Table */}
         <div className="bg-white rounded-lg shadow border border-gray-200 flex-1 flex flex-col max-w-md mx-auto w-full">
           {/* Header row */}
-          <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 p-2 bg-gray-100 border-b border-gray-200 text-sm font-medium text-gray-700 items-center">
-            <div className="px-1">Flag</div>
-            <div className="px-1">Currency</div>
-            <div className="px-1 flex flex-col items-center leading-none">
+          <div className="grid grid-cols-[28px_1fr_64px_96px_20px] gap-2 p-2 bg-gray-100 border-b border-gray-200 text-sm font-medium text-gray-700 items-center">
+            <div />
+            <div>Currency</div>
+            <div className="flex flex-col items-end leading-none">
               <img src="/super-rich.jpeg" alt="Super Rich" className="h-5 w-auto rounded object-contain" />
-              <span className="text-[9px] text-green-700 font-semibold mt-0.5">รับซื้อ</span>
             </div>
-            <div className="px-1 text-right">Rate</div>
+            <div className="text-right">Rate</div>
+            <div />
           </div>
 
           <div className="divide-y divide-gray-100 overflow-y-auto flex-1">
@@ -128,7 +128,7 @@ export default function AdminPage() {
               const sr = rate.Cur ? superrich[rate.Cur] : undefined
               const fc = rate.Cur ? forecast[rate.Cur] : undefined
               return (
-                <div key={rate.id} className={`${editingId === rate.id ? 'bg-blue-50 p-3 border-2 border-blue-300' : 'grid grid-cols-[auto_1fr_auto_auto] gap-2 px-2 py-1 items-center hover:bg-gray-50'} transition-all`}>
+                <div key={rate.id} className={`${editingId === rate.id ? 'bg-blue-50 p-3 border-2 border-blue-300' : 'grid grid-cols-[28px_1fr_64px_96px_20px] gap-2 px-2 py-1.5 items-center hover:bg-gray-50'} transition-all`}>
                   {editingId === rate.id ? (
                     // Expanded edit mode layout
                     <div className="space-y-3">
@@ -212,31 +212,32 @@ export default function AdminPage() {
                       </div>
 
                       {/* Currency */}
-                      <div className="font-medium text-sm text-gray-800">{rate.Cur}</div>
+                      <div className="font-medium text-sm text-gray-800 truncate">{rate.Cur}</div>
 
                       {/* Super Rich buying (green) */}
-                      <div className="px-1 text-right font-mono text-sm font-semibold text-green-600 tabular-nums min-w-[52px]">
+                      <div className="text-right font-mono text-sm font-semibold text-green-600 tabular-nums">
                         {sr ? formatSR(sr.buying) : (srLoading ? <span className="text-gray-300">…</span> : <span className="text-gray-300">-</span>)}
                       </div>
 
-                      {/* Rate (current) + suggested + edit button */}
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="flex flex-col items-end leading-tight">
-                          <span className="font-mono text-sm">{rate.Rate}</span>
-                          {fc?.suggested != null && (
-                            <span className="text-[10px] text-gray-400 flex items-center gap-0.5 whitespace-nowrap">
-                              แนะนำ <span className="text-blue-600 font-semibold font-mono">{formatSR(fc.suggested)}</span>
-                              <TrendArrow t={fc.sr_trend} />
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => startEdit(rate)}
-                          className="p-1 text-gray-400 hover:text-blue-600"
-                        >
-                          ✎
-                        </button>
+                      {/* Rate (current) + suggested */}
+                      <div className="text-right leading-tight">
+                        <div className="font-mono text-sm text-gray-900 tabular-nums">{rate.Rate}</div>
+                        {fc?.suggested != null && (
+                          <div className="text-[10px] text-gray-400 whitespace-nowrap">
+                            แนะนำ <span className="text-blue-600 font-semibold font-mono tabular-nums">{formatSR(fc.suggested)}</span>
+                            <TrendArrow t={fc.sr_trend} />
+                          </div>
+                        )}
                       </div>
+
+                      {/* Edit */}
+                      <button
+                        onClick={() => startEdit(rate)}
+                        className="justify-self-end text-gray-400 hover:text-blue-600"
+                        aria-label="แก้ไข"
+                      >
+                        ✎
+                      </button>
                     </>
                   )}
                 </div>
