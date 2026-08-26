@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { getRates, updateRate, refreshSuperrichRates, getSuperrichLatest, type SuperrichRate } from '../lib/api'
+import { getRates, updateRate, refreshSuperrichRates, getSuperrichLatest, getRateForecast, type SuperrichRate, type RateForecast } from '../lib/api'
 import { getFlagIcon } from '../utils/currencyUtils'
 import type { PeterExchangeRate } from '../types/database'
 
@@ -12,10 +12,18 @@ const formatSR = (v: number | null | undefined) => {
   return v.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })
 }
 
+const TrendArrow = ({ t }: { t: RateForecast['sr_trend'] }) => {
+  if (t === 'up') return <span className="text-green-600" title="Super Rich มีแนวโน้มขึ้น">▲</span>
+  if (t === 'down') return <span className="text-red-500" title="Super Rich มีแนวโน้มลง">▼</span>
+  if (t === 'flat') return <span className="text-gray-400" title="ทรงตัว">▬</span>
+  return null
+}
+
 export default function AdminPage() {
   const location = useLocation()
   const [rates, setRates] = useState<PeterExchangeRate[]>([])
   const [superrich, setSuperrich] = useState<Record<string, SuperrichRate>>({})
+  const [forecast, setForecast] = useState<Record<string, RateForecast>>({})
   const [srLoading, setSrLoading] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editValue, setEditValue] = useState<string>('')
@@ -31,6 +39,11 @@ export default function AdminPage() {
     const load = async () => {
       // Our own board rates (fast — always show these immediately)
       getRates().then(d => { if (!cancelled) setRates(d) }).catch(e => console.error('Failed to fetch rates', e))
+
+      // Suggested rate to set today (Super Rich buying − our usual margin)
+      getRateForecast(30)
+        .then(list => { if (!cancelled) setForecast(Object.fromEntries(list.map(f => [f.code, f]))) })
+        .catch(e => console.error('Failed to fetch forecast', e))
 
       // Force a fresh Super Rich scrape → store → show. Falls back to the last
       // stored set if the scrape request itself fails.
@@ -113,6 +126,7 @@ export default function AdminPage() {
           <div className="divide-y divide-gray-100 overflow-y-auto flex-1">
             {rates.map((rate) => {
               const sr = rate.Cur ? superrich[rate.Cur] : undefined
+              const fc = rate.Cur ? forecast[rate.Cur] : undefined
               return (
                 <div key={rate.id} className={`${editingId === rate.id ? 'bg-blue-50 p-3 border-2 border-blue-300' : 'grid grid-cols-[auto_1fr_auto_auto] gap-2 px-2 py-1 items-center hover:bg-gray-50'} transition-all`}>
                   {editingId === rate.id ? (
@@ -153,6 +167,17 @@ export default function AdminPage() {
                           placeholder="e.g. 30.00"
                           step="0.01"
                         />
+                        {fc?.suggested != null && (
+                          <button
+                            type="button"
+                            onClick={() => setEditValue(String(fc.suggested))}
+                            className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded border border-blue-200 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100"
+                          >
+                            ใช้เรทแนะนำวันนี้ <span className="font-mono font-bold">{formatSR(fc.suggested)}</span>
+                            <TrendArrow t={fc.sr_trend} />
+                            <span className="text-[10px] text-blue-400">({fc.samples} วัน)</span>
+                          </button>
+                        )}
                       </div>
 
                       {/* Action buttons */}
@@ -194,9 +219,17 @@ export default function AdminPage() {
                         {sr ? formatSR(sr.buying) : (srLoading ? <span className="text-gray-300">…</span> : <span className="text-gray-300">-</span>)}
                       </div>
 
-                      {/* Rate + edit button */}
-                      <div className="flex items-center justify-end space-x-2">
-                        <span className="font-mono text-sm">{rate.Rate}</span>
+                      {/* Rate (current) + suggested + edit button */}
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="flex flex-col items-end leading-tight">
+                          <span className="font-mono text-sm">{rate.Rate}</span>
+                          {fc?.suggested != null && (
+                            <span className="text-[10px] text-gray-400 flex items-center gap-0.5 whitespace-nowrap">
+                              แนะนำ <span className="text-blue-600 font-semibold font-mono">{formatSR(fc.suggested)}</span>
+                              <TrendArrow t={fc.sr_trend} />
+                            </span>
+                          )}
+                        </div>
                         <button
                           onClick={() => startEdit(rate)}
                           className="p-1 text-gray-400 hover:text-blue-600"

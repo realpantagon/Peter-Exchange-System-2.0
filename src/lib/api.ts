@@ -192,6 +192,24 @@ export const getSuperrichLatest = async (): Promise<SuperrichRate[]> => {
     return request<SuperrichRate[]>('/superrich/latest')
 }
 
+/** Suggested rate to set today = Super Rich buying − our usual margin. */
+export interface RateForecast {
+    code: string
+    sr_buying: number | null   // Super Rich buying today
+    avg_margin: number | null  // avg(sr_buying − our rate) over the window
+    samples: number            // days that fed the margin
+    suggested: number | null   // sr_buying − avg_margin
+    sr_trend: 'up' | 'down' | 'flat' | null
+}
+
+export const getRateForecast = async (window = 30): Promise<RateForecast[]> => {
+    return request<RateForecast[]>('/rate-forecast', { query: { window: String(window) } })
+}
+
+export const getRateForecastFor = async (code: string, window = 30): Promise<RateForecast> => {
+    return request<RateForecast>('/rate-forecast', { query: { code, window: String(window) } })
+}
+
 // --- Transaction Services ---
 
 /** One day of sales for one branch, already summed by the Worker. */

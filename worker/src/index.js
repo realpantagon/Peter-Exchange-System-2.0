@@ -343,6 +343,82 @@ api.get('/superrich/latest', async (c) => {
   return c.json(results);
 });
 
+// Suggested rate to set today, per currency:
+//   suggested = Super Rich buying today − our usual margin
+// where the margin is the average gap between Super Rich buying and the rate we
+// actually gave (transactions), over the last `window` days. Also returns a
+// short-term Super Rich trend (today vs the last 7 days) as a hint.
+api.get('/rate-forecast', async (c) => {
+  const code = c.req.query('code');
+  const window = Math.min(Math.max(parseInt(c.req.query('window') || '30', 10) || 30, 7), 365);
+  const windowMod = `-${window} days`;
+
+  // Latest Super Rich buying per code (from the most recent scrape).
+  const latestWhere = code ? 'AND code = ?' : '';
+  const latest = await c.env.DB.prepare(
+    `SELECT code, buying AS sr_buying FROM superrich_rates
+     WHERE scraped_at = (SELECT MAX(scraped_at) FROM superrich_rates) ${latestWhere}`
+  ).bind(...(code ? [code] : [])).all();
+
+  // Average margin (Super Rich buying − our avg rate) per code over the window.
+  const marginWhere = code ? 'WHERE sr.code = ?' : '';
+  const margin = await c.env.DB.prepare(
+    `WITH sr AS (
+        SELECT code, created_date AS day, buying AS sr_buying
+        FROM superrich_rates
+        WHERE created_date >= date('now', '+7 hours', ?)
+     ),
+     ours AS (
+        SELECT currency_code AS code, date(created_at, '${SHOP_TZ_SHIFT}') AS day, AVG(rate) AS our_avg
+        FROM transactions
+        WHERE rate IS NOT NULL AND date(created_at, '${SHOP_TZ_SHIFT}') >= date('now', '+7 hours', ?)
+        GROUP BY code, day
+     )
+     SELECT sr.code,
+            AVG(sr.sr_buying - ours.our_avg) AS avg_margin,
+            COUNT(*) AS samples
+     FROM sr JOIN ours ON sr.code = ours.code AND sr.day = ours.day
+     ${marginWhere}
+     GROUP BY sr.code`
+  ).bind(...(code ? [windowMod, windowMod, code] : [windowMod, windowMod])).all();
+
+  // Super Rich 7-day average per code, for a simple up/down/flat trend hint.
+  const trendWhere = code ? 'AND code = ?' : '';
+  const trend = await c.env.DB.prepare(
+    `SELECT code, AVG(buying) AS sr_avg7 FROM superrich_rates
+     WHERE created_date >= date('now', '+7 hours', '-7 days') ${trendWhere} GROUP BY code`
+  ).bind(...(code ? [code] : [])).all();
+
+  const marginByCode = new Map(margin.results.map(r => [r.code, r]));
+  const trendByCode = new Map(trend.results.map(r => [r.code, r.sr_avg7]));
+
+  const out = latest.results.map(r => {
+    const m = marginByCode.get(r.code);
+    const avgMargin = m ? m.avg_margin : null;
+    const samples = m ? m.samples : 0;
+    const suggested = (r.sr_buying !== null && avgMargin !== null)
+      ? Math.round((r.sr_buying - avgMargin) * 1e4) / 1e4
+      : null;
+    const avg7 = trendByCode.get(r.code);
+    let sr_trend = null;
+    if (r.sr_buying !== null && avg7 !== null && avg7 !== undefined) {
+      const diff = r.sr_buying - avg7;
+      const eps = Math.abs(avg7) * 0.001; // 0.1% dead-band
+      sr_trend = diff > eps ? 'up' : diff < -eps ? 'down' : 'flat';
+    }
+    return {
+      code: r.code,
+      sr_buying: r.sr_buying,
+      avg_margin: avgMargin === null ? null : Math.round(avgMargin * 1e4) / 1e4,
+      samples,
+      suggested,
+      sr_trend,
+    };
+  });
+
+  return c.json(code ? (out[0] ?? { code, sr_buying: null, avg_margin: null, samples: 0, suggested: null, sr_trend: null }) : out);
+});
+
 api.post('/transactions', zValidator('json', txnBody), async (c) => {
   const body = c.req.valid('json');
   const row = await c.env.DB.prepare(

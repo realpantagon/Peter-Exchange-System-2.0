@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { getRates, getRateHistory, type RateHistoryRow } from '../lib/api'
+import { getRates, getRateHistory, getRateForecastFor, type RateHistoryRow, type RateForecast } from '../lib/api'
 import type { PeterExchangeRate } from '../types/database'
 
 // Line styling — Super Rich รับซื้อ is the key reference (green, prominent);
@@ -54,6 +54,7 @@ export default function RateHistoryPage() {
     const [code, setCode] = useState<string>('USD')
     const [rangeDays, setRangeDays] = useState<number>(30)
     const [rows, setRows] = useState<RateHistoryRow[]>([])
+    const [forecast, setForecast] = useState<RateForecast | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(false)
     const isMobile = useIsMobile()
@@ -64,6 +65,16 @@ export default function RateHistoryPage() {
             .then(setCurrencies)
             .catch(() => {/* selector falls back to just USD */ })
     }, [])
+
+    // Suggested rate to set today for the selected currency
+    useEffect(() => {
+        let cancelled = false
+        setForecast(null)
+        getRateForecastFor(code, 30)
+            .then(f => { if (!cancelled) setForecast(f) })
+            .catch(() => { if (!cancelled) setForecast(null) })
+        return () => { cancelled = true }
+    }, [code])
 
     useEffect(() => {
         let cancelled = false
@@ -150,6 +161,26 @@ export default function RateHistoryPage() {
                     </div>
                 </div>
 
+                {/* Suggested rate for today (forecast) */}
+                {forecast?.suggested != null && (
+                    <div className="rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3"
+                        style={{ backgroundColor: 'var(--vault-brass-faint)', border: '1px solid var(--vault-brass-border)' }}>
+                        <div>
+                            <div className="text-xs font-semibold" style={{ color: 'var(--vault-muted)' }}>💡 เรทแนะนำที่ควรตั้งวันนี้</div>
+                            <div className="font-figure text-2xl font-bold tabular-nums mt-0.5" style={{ color: 'var(--vault-brass)' }}>
+                                {formatRate(forecast.suggested)}
+                                {forecast.sr_trend === 'up' && <span className="text-green-600 text-base ml-2">▲ Super Rich ขาขึ้น</span>}
+                                {forecast.sr_trend === 'down' && <span className="text-red-500 text-base ml-2">▼ Super Rich ขาลง</span>}
+                                {forecast.sr_trend === 'flat' && <span className="text-gray-400 text-base ml-2">▬ ทรงตัว</span>}
+                            </div>
+                        </div>
+                        <div className="text-[11px] text-right" style={{ color: 'var(--vault-muted)' }}>
+                            = Super Rich รับซื้อ {formatRate(forecast.sr_buying)}<br />
+                            − margin เฉลี่ย {forecast.avg_margin != null ? formatRate(forecast.avg_margin) : '—'} ({forecast.samples} วัน)
+                        </div>
+                    </div>
+                )}
+
                 {/* Summary tiles */}
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                     <StatTile label="Super Rich รับซื้อ (ล่าสุด)" value={formatRate(summary.latest?.sr_buying)} accent="#16A34A" />
@@ -194,6 +225,15 @@ export default function RateHistoryPage() {
                                         labelStyle={{ color: 'var(--vault-muted)' }}
                                     />
                                     <Legend wrapperStyle={{ color: 'var(--vault-muted)', fontSize: isMobile ? 11 : 12 }} iconSize={isMobile ? 9 : 14} />
+                                    {forecast?.suggested != null && (
+                                        <ReferenceLine
+                                            y={forecast.suggested}
+                                            stroke="var(--vault-brass)"
+                                            strokeDasharray="6 4"
+                                            strokeWidth={1.5}
+                                            label={{ value: `แนะนำ ${formatRate(forecast.suggested)}`, position: 'insideTopLeft', fill: 'var(--vault-brass)', fontSize: isMobile ? 10 : 11 }}
+                                        />
+                                    )}
                                     {SERIES.map(s => (
                                         <Line
                                             key={s.key}
