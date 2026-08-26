@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
     ComposedChart, Line, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { getSalesForecast, type SalesForecast } from '../lib/api'
+import { getSalesForecast, getSalesBacktest, type SalesForecast, type SalesBacktest } from '../lib/api'
 import Spinner from './Spinner'
 
 const BRANCHES = [
@@ -28,19 +28,36 @@ function useIsMobile() {
 export default function SalesForecastPage() {
     const [branch, setBranch] = useState('')
     const [data, setData] = useState<SalesForecast | null>(null)
+    const [backtest, setBacktest] = useState<SalesBacktest | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(false)
     const isMobile = useIsMobile()
 
     useEffect(() => {
         let cancelled = false
-        setLoading(true); setError(false)
+        setLoading(true); setError(false); setBacktest(null)
         getSalesForecast(branch || undefined, 14)
             .then(d => { if (!cancelled) setData(d) })
             .catch(() => { if (!cancelled) setError(true) })
             .finally(() => { if (!cancelled) setLoading(false) })
+        getSalesBacktest(branch || undefined, 30)
+            .then(b => { if (!cancelled) setBacktest(b) })
+            .catch(() => { if (!cancelled) setBacktest(null) })
         return () => { cancelled = true }
     }, [branch])
+
+    const btData = useMemo(() =>
+        (backtest?.points ?? []).map(p => ({
+            label: shortDay(p.day), actual: p.actual, predicted: p.predicted, low: p.low, band: p.high - p.low,
+        })), [backtest])
+
+    const verdict = useMemo(() => {
+        const h = backtest?.hit_rate
+        if (h == null) return null
+        if (h >= 80) return { text: 'ทำนายได้ดี — ส่วนใหญ่อยู่ในช่วงที่คาด', color: '#16A34A', emoji: '✅' }
+        if (h >= 60) return { text: 'พอใช้ — ผันผวนบ้างตามธรรมชาติของยอดรายวัน', color: '#D97706', emoji: '⚠️' }
+        return { text: 'ยังคลาดเคลื่อนสูง — ควรปรับโมเดล', color: '#DC2626', emoji: '❗' }
+    }, [backtest])
 
     // Combined chart: last 30 actual days + 14 forecast days, bridged so lines connect.
     const chartData = useMemo(() => {
@@ -140,6 +157,44 @@ export default function SalesForecastPage() {
                         เส้นน้ำเงิน = ยอดขายจริง · เส้นประส้ม = คาดการณ์ · แถบส้มจาง = ช่วงความคลาดเคลื่อน (±1σ)
                     </p>
                 </div>
+
+                {/* Backtest — did past forecasts meet expectations? */}
+                {backtest && backtest.n > 0 && (
+                    <div className="rounded-2xl p-4 sm:p-6" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                            <h3 className="font-display text-base font-semibold" style={{ color: 'var(--vault-paper)' }}>ผลย้อนหลัง — ทำนายแม่นแค่ไหน?</h3>
+                            <span className="text-xs" style={{ color: 'var(--vault-muted)' }}>ทดสอบ {backtest.n} วัน (ใช้เฉพาะข้อมูลก่อนหน้าแต่ละวัน)</span>
+                        </div>
+                        {verdict && (
+                            <p className="text-sm font-semibold mb-4" style={{ color: verdict.color }}>{verdict.emoji} {verdict.text}</p>
+                        )}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                            <Tile label="ตรงตามคาด (อยู่ในช่วง ±1σ)" value={backtest.hit_rate != null ? `${backtest.hit_rate}%` : '—'} accent="#16A34A" />
+                            <Tile label="พลาดเฉลี่ย (MAPE)" value={backtest.mape != null ? `${backtest.mape}%` : '—'} />
+                            <Tile label="พลาดเฉลี่ย (บาท)" value={backtest.mae != null ? `±${formatTHB(backtest.mae)}` : '—'} />
+                            <Tile label="เอนเอียง" value={backtest.bias != null ? `${backtest.bias >= 0 ? 'สูงไป +' : 'ต่ำไป −'}${formatTHB(Math.abs(backtest.bias))}` : '—'} accent={backtest.bias != null && backtest.bias >= 0 ? '#2563EB' : '#DC2626'} />
+                        </div>
+                        <div className="h-[240px] sm:h-[300px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <ComposedChart data={btData} margin={{ top: 5, right: isMobile ? 6 : 16, left: isMobile ? -4 : 8, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--vault-hairline)" />
+                                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--vault-muted)', fontSize: isMobile ? 9 : 11 }} interval="preserveStartEnd" minTickGap={isMobile ? 22 : 14} dy={6} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--vault-muted)', fontSize: isMobile ? 9 : 11 }} tickFormatter={(v) => compact(v as number)} width={isMobile ? 40 : 54} />
+                                    <Tooltip formatter={(value, name) => [formatTHB(Number(value)), name as string]}
+                                        contentStyle={{ borderRadius: '12px', border: '1px solid var(--vault-hairline)', backgroundColor: 'var(--vault-panel)', color: 'var(--vault-paper)', fontSize: isMobile ? 12 : 13 }}
+                                        labelStyle={{ color: 'var(--vault-muted)' }} />
+                                    <Area dataKey="low" stackId="bt" stroke="none" fill="none" isAnimationActive={false} legendType="none" name="ขอบล่าง" />
+                                    <Area dataKey="band" stackId="bt" stroke="none" fill="#D97706" fillOpacity={0.12} isAnimationActive={false} legendType="none" name="ช่วงคาด" />
+                                    <Line type="monotone" dataKey="predicted" name="คาดการณ์" stroke="#D97706" strokeWidth={2} strokeDasharray="6 4" dot={false} />
+                                    <Line type="monotone" dataKey="actual" name="ยอดจริง" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 2, fill: '#2563EB' }} activeDot={{ r: 5 }} />
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <p className="mt-3 text-[11px]" style={{ color: 'var(--vault-muted)' }}>
+                            "ตรงตามคาด" = ยอดจริงตกอยู่ในแถบ ±1σ ของคำทำนาย · ยอดแลกเงินรายวันผันผวนสูงตามธรรมชาติ จึงดูภาพรวม/ทิศทางมากกว่าตัวเลขเป๊ะรายวัน
+                        </p>
+                    </div>
+                )}
 
                 {/* Weekday pattern */}
                 <div className="rounded-2xl p-4 sm:p-6" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>

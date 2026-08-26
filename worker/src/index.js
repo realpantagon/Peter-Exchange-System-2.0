@@ -639,6 +639,77 @@ api.get('/sales-forecast', async (c) => {
   });
 });
 
+// Backtest the sales forecast over the last `days` (≤31). For each past day the
+// model is refit using ONLY data before that day (no leakage), then compared to
+// the actual — so this answers "does the forecast meet expectations?".
+api.get('/sales-forecast/backtest', async (c) => {
+  const branch = c.req.query('branch');
+  const days = Math.min(Math.max(parseInt(c.req.query('days') || '30', 10) || 30, 7), 31);
+  const lookback = 90;
+  const ref = shopToday();
+  const dayMs = 86400000;
+  const addDays = (ymd, n) => new Date(Date.parse(ymd) + n * dayMs).toISOString().slice(0, 10);
+
+  const where = ['branch IS NOT NULL',
+    `date(created_at, '${SHOP_TZ_SHIFT}') >= date(?, '-${days + lookback + 1} days')`,
+    `date(created_at, '${SHOP_TZ_SHIFT}') <= ?`];
+  const binds = [ref, ref];
+  if (branch) { where.push('branch = ?'); binds.push(branch); }
+  const { results } = await c.env.DB.prepare(
+    `SELECT date(created_at, '${SHOP_TZ_SHIFT}') AS day, SUM(COALESCE(total_thb, 0)) AS total
+     FROM transactions WHERE ${where.join(' AND ')} GROUP BY day ORDER BY day`
+  ).bind(...binds).all();
+
+  const totalByDay = new Map(results.map(r => [r.day, r.total]));
+  const allDays = results.map(r => ({ day: r.day, total: r.total }));
+
+  // Refit the level × weekday model using only days strictly before `cutoff`.
+  const fit = (cutoff) => {
+    const start = addDays(cutoff, -lookback);
+    const rows = allDays.filter(d => d.day < cutoff && d.day >= start);
+    if (rows.length < 14) return null;
+    const mean = rows.reduce((a, b) => a + b.total, 0) / rows.length;
+    const byDow = Array.from({ length: 7 }, () => []);
+    rows.forEach(h => byDow[dowOf(h.day)].push(h.total));
+    const factor = byDow.map(arr => (arr.length && mean > 0) ? (arr.reduce((a, b) => a + b, 0) / arr.length) / mean : 1);
+    const cutT = Date.parse(cutoff);
+    let ws = 0, ls = 0;
+    for (const h of rows) { const f = factor[dowOf(h.day)] || 1; if (f <= 0) continue; const age = Math.max(0, Math.round((cutT - Date.parse(h.day)) / dayMs)); const w = Math.pow(0.5, age / 21); ws += w; ls += w * (h.total / f); }
+    const level = ws > 0 ? ls / ws : mean;
+    let sq = 0; for (const h of rows) { const e = level * (factor[dowOf(h.day)] || 1); sq += (h.total - e) ** 2; }
+    const std = rows.length > 1 ? Math.sqrt(sq / rows.length) : 0;
+    return { level, factor, std };
+  };
+
+  const points = [];
+  let absPctSum = 0, absSum = 0, errSum = 0, hit = 0, n = 0;
+  for (let i = days; i >= 1; i--) {          // oldest → newest, skip today (incomplete)
+    const d = addDays(ref, -i);
+    if (!totalByDay.has(d)) continue;
+    const actual = totalByDay.get(d);
+    if (actual <= 0) continue;
+    const m = fit(d);
+    if (!m) continue;
+    const predicted = Math.max(0, m.level * (m.factor[dowOf(d)] || 1));
+    const within = actual >= predicted - m.std && actual <= predicted + m.std;
+    const err = predicted - actual;
+    points.push({
+      day: d, predicted: Math.round(predicted), actual: Math.round(actual),
+      low: Math.round(Math.max(0, predicted - m.std)), high: Math.round(predicted + m.std), within,
+    });
+    absPctSum += Math.abs(err) / actual; absSum += Math.abs(err); errSum += err; if (within) hit++; n++;
+  }
+
+  return c.json({
+    branch: branch || 'all', n,
+    mape: n ? Math.round((absPctSum / n) * 1000) / 10 : null,   // mean abs % error
+    mae: n ? Math.round(absSum / n) : null,                     // mean abs error (THB)
+    bias: n ? Math.round(errSum / n) : null,                    // + = over-predicted
+    hit_rate: n ? Math.round((hit / n) * 1000) / 10 : null,     // % of days within ±1σ
+    points,
+  });
+});
+
 api.post('/transactions', zValidator('json', txnBody), async (c) => {
   const body = c.req.valid('json');
   const row = await c.env.DB.prepare(

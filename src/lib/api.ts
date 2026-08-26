@@ -237,6 +237,21 @@ export const getSalesForecast = async (branch?: string, horizon = 14): Promise<S
     return request<SalesForecast>('/sales-forecast', { query: { branch, horizon: String(horizon) } })
 }
 
+/** Backtest: does the sales forecast meet expectations over the last N days? */
+export interface SalesBacktest {
+    branch: string
+    n: number
+    mape: number | null      // mean abs % error
+    mae: number | null       // mean abs error (THB)
+    bias: number | null      // + = over-predicted
+    hit_rate: number | null  // % of days the actual landed within ±1σ
+    points: { day: string; predicted: number; actual: number; low: number; high: number; within: boolean }[]
+}
+
+export const getSalesBacktest = async (branch?: string, days = 30): Promise<SalesBacktest> => {
+    return request<SalesBacktest>('/sales-forecast/backtest', { query: { branch, days: String(days) } })
+}
+
 // --- Transaction Services ---
 
 /** One day of sales for one branch, already summed by the Worker. */
