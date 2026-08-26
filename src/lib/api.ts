@@ -152,6 +152,27 @@ export const updateRate = async (id: number, rate: string): Promise<void> => {
     }
 }
 
+/** One day of rate history for a currency: Super Rich reference vs. the range
+ *  of rates we actually gave that day. Nulls where one side has no data. */
+export interface RateHistoryRow {
+    day: string              // 'YYYY-MM-DD' shop-local
+    sr_buying: number | null // Super Rich buying rate
+    sr_selling: number | null// Super Rich selling rate
+    our_min: number | null   // lowest rate we gave that day
+    our_max: number | null   // highest rate we gave that day
+    our_avg: number | null   // average rate we gave that day
+    count: number            // number of our transactions that day
+}
+
+export const getRateHistory = async (code: string, from?: string, to?: string): Promise<RateHistoryRow[]> => {
+    try {
+        return await request<RateHistoryRow[]>('/rate-history', { query: { code, from, to } })
+    } catch (error) {
+        console.error('Error fetching rate history:', error)
+        throw error
+    }
+}
+
 // --- Transaction Services ---
 
 /** One day of sales for one branch, already summed by the Worker. */

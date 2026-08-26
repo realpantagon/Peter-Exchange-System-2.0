@@ -265,6 +265,54 @@ api.get('/summary/daily', async (c) => {
   return response;
 });
 
+// Rate history for one currency: the Super Rich reference rate each day next to
+// the range of rates WE actually gave that day (min/max/avg from the ledger).
+// One row per shop-day, Super Rich and our-rates merged on that day.
+api.get('/rate-history', async (c) => {
+  const { code, from, to } = c.req.query();
+  if (!code) return c.json({ error: 'code is required' }, 400);
+
+  // Super Rich reference rates (already stored per created_date = shop day).
+  const srWhere = ['code = ?'];
+  const srBinds = [code];
+  if (from) { srWhere.push('created_date >= ?'); srBinds.push(from); }
+  if (to) { srWhere.push('created_date <= ?'); srBinds.push(to); }
+  const sr = await c.env.DB.prepare(
+    `SELECT created_date AS day, buying AS sr_buying, selling AS sr_selling
+     FROM superrich_rates WHERE ${srWhere.join(' AND ')} ORDER BY created_date`
+  ).bind(...srBinds).all();
+
+  // The rates we quoted, bucketed into Bangkok-local days like /summary/daily.
+  const txWhere = ['currency_code = ?', 'rate IS NOT NULL'];
+  const txBinds = [code];
+  if (from) { txWhere.push(`date(created_at, '${SHOP_TZ_SHIFT}') >= ?`); txBinds.push(from); }
+  if (to) { txWhere.push(`date(created_at, '${SHOP_TZ_SHIFT}') <= ?`); txBinds.push(to); }
+  const tx = await c.env.DB.prepare(
+    `SELECT date(created_at, '${SHOP_TZ_SHIFT}') AS day,
+            MIN(rate) AS our_min, MAX(rate) AS our_max,
+            AVG(rate) AS our_avg, COUNT(*) AS count
+     FROM transactions WHERE ${txWhere.join(' AND ')} GROUP BY day`
+  ).bind(...txBinds).all();
+
+  const byDay = new Map();
+  for (const r of sr.results) {
+    byDay.set(r.day, {
+      day: r.day, sr_buying: r.sr_buying, sr_selling: r.sr_selling,
+      our_min: null, our_max: null, our_avg: null, count: 0,
+    });
+  }
+  for (const r of tx.results) {
+    const e = byDay.get(r.day) || {
+      day: r.day, sr_buying: null, sr_selling: null,
+      our_min: null, our_max: null, our_avg: null, count: 0,
+    };
+    e.our_min = r.our_min; e.our_max = r.our_max; e.our_avg = r.our_avg; e.count = r.count;
+    byDay.set(r.day, e);
+  }
+  const merged = [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1));
+  return c.json(merged);
+});
+
 api.post('/transactions', zValidator('json', txnBody), async (c) => {
   const body = c.req.valid('json');
   const row = await c.env.DB.prepare(

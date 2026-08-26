@@ -7,6 +7,7 @@ import AdminLayout from './components/AdminLayout'
 
 import RootPage from './components/RootPage'
 import DailyDetailPage from './components/DailyDetailPage'
+import RateHistoryPage from './components/RateHistoryPage'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
             between them is fast and returns to where you left off. */}
         <Route element={<AdminLayout />}>
           <Route path="/admin2025" element={<AdminPage />} />
+          <Route path="/rate-history" element={<RateHistoryPage />} />
           <Route path="/superadmin2025" element={<SuperAdminPage />} />
           <Route path="/root" element={<RootPage />} />
           <Route path="/root/daily" element={<DailyDetailPage />} />
