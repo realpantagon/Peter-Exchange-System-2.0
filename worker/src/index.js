@@ -21,7 +21,9 @@ const CURRENCY_MAP = {
   EUR: [{ code: 'EUR', denoms: null }],
   JPY: [{ code: 'JPY', denoms: null }],
   GBP: [{ code: 'GBP', denoms: null }],
-  SGD: [{ code: 'SGD', denoms: null }],
+  // SGD is listed twice: a premium 1000-note block (~29) and the regular notes
+  // (~25). Pin to the regular note so we track the normal SGD rate, not the 1000.
+  SGD: [{ code: 'SGD', denoms: ['100 - 50', '100-50', '100', '50', '20 - 5', '20-5'] }],
   AUD: [{ code: 'AUD', denoms: null }],
   CHF: [{ code: 'CHF', denoms: null }],
   HKD: [{ code: 'HKD', denoms: null }],
@@ -101,7 +103,10 @@ async function scrapeToday(env) {
   return { success: true, scraped_at: now, codes_saved: rows.map((r) => r.code) };
 }
 
-async function backfill(env, fromStr, toStr) {
+// `code` (optional): only (re)fill that one currency, and treat a date as missing
+// unless THAT code exists for it — lets us re-backfill a single currency (e.g.
+// after fixing its denomination mapping) without re-fetching everything else.
+async function backfill(env, fromStr, toStr, code) {
   let saved = 0, skipped = 0;
   const errors = [];
 
@@ -112,9 +117,9 @@ async function backfill(env, fromStr, toStr) {
     const createdDate = `${yyyy}-${mm}-${dd}`;
     const apiDate = `${mm}-${dd}-${yyyy}`;
 
-    const exists = await env.DB.prepare(
-      'SELECT 1 FROM superrich_rates WHERE created_date = ? LIMIT 1'
-    ).bind(createdDate).first();
+    const exists = code
+      ? await env.DB.prepare('SELECT 1 FROM superrich_rates WHERE created_date = ? AND code = ? LIMIT 1').bind(createdDate, code).first()
+      : await env.DB.prepare('SELECT 1 FROM superrich_rates WHERE created_date = ? LIMIT 1').bind(createdDate).first();
     if (exists) { skipped++; continue; }
 
     try {
@@ -126,7 +131,8 @@ async function backfill(env, fromStr, toStr) {
       const json = await r.json();
       if (json.code === 20000 && json.data?.exchangeRate?.length) {
         const scrapedAt = json.data.exchangeRate[0]?.rate?.[0]?.dateTime || new Date().toISOString();
-        const rows = extractRows(json.data.exchangeRate, createdDate, scrapedAt);
+        let rows = extractRows(json.data.exchangeRate, createdDate, scrapedAt);
+        if (code) rows = rows.filter((row) => row.code === code);
         await insertRows(env, rows);
         saved++;
       } else {
@@ -359,7 +365,9 @@ api.get('/superrich/latest', async (c) => {
 // The margin is the gap between Super Rich buying and OUR LOWEST rate that day
 // (transactions), recency-weighted over the last `window` days so recent pricing
 // dominates (half-life 7 days). Also returns a short-term Super Rich trend.
-const MARGIN_HALF_LIFE_DAYS = 4;
+const MARGIN_HALF_LIFE_DAYS = 4;   // recency weight halves every N days
+const DAY_OUTLIER_BAND = 0.06;     // per day, ignore rates >6% from that day's median
+const MARGIN_MAD_K = 3;            // drop days whose margin is >3·MAD from the median margin
 
 api.get('/rate-forecast', async (c) => {
   const code = c.req.query('code');
@@ -373,35 +381,84 @@ api.get('/rate-forecast', async (c) => {
      WHERE scraped_at = (SELECT MAX(scraped_at) FROM superrich_rates) ${latestWhere}`
   ).bind(...(code ? [code] : [])).all();
 
-  // Per-day margin = Super Rich buying − our LOWEST rate that day, with the day's
-  // age so we can weight recent days more heavily in JS.
-  const marginWhere = code ? 'WHERE sr.code = ?' : '';
-  const margin = await c.env.DB.prepare(
-    `WITH sr AS (
-        SELECT code, created_date AS day, buying AS sr_buying
-        FROM superrich_rates
-        WHERE created_date >= date('now', '+7 hours', ?)
-     ),
-     ours AS (
-        SELECT currency_code AS code, date(created_at, '${SHOP_TZ_SHIFT}') AS day, MIN(rate) AS our_low
-        FROM transactions
-        WHERE rate IS NOT NULL AND date(created_at, '${SHOP_TZ_SHIFT}') >= date('now', '+7 hours', ?)
-        GROUP BY code, day
-     )
-     SELECT sr.code,
-            CAST(julianday(date('now', '+7 hours')) - julianday(sr.day) AS INTEGER) AS age_days,
-            (sr.sr_buying - ours.our_low) AS margin
-     FROM sr JOIN ours ON sr.code = ours.code AND sr.day = ours.day
-     ${marginWhere}`
-  ).bind(...(code ? [windowMod, windowMod, code] : [windowMod, windowMod])).all();
+  // Pull the raw rates we gave (per code/day) and Super Rich buying per day, then
+  // compute the margin in JS so outliers can be stripped — one cheap small-bill
+  // exchange must not drag the whole suggestion down.
+  const codeFilter = code ? 'AND currency_code = ?' : '';
+  const rateRows = await c.env.DB.prepare(
+    `SELECT currency_code AS code, date(created_at, '${SHOP_TZ_SHIFT}') AS day, rate
+     FROM transactions
+     WHERE rate IS NOT NULL AND date(created_at, '${SHOP_TZ_SHIFT}') >= date('now', '+7 hours', ?) ${codeFilter}`
+  ).bind(...(code ? [windowMod, code] : [windowMod])).all();
 
-  // Recency-weighted mean margin per code (weight halves every 7 days).
+  const srDayFilter = code ? 'AND code = ?' : '';
+  const srRows = await c.env.DB.prepare(
+    `SELECT code, created_date AS day, buying AS sr_buying
+     FROM superrich_rates
+     WHERE created_date >= date('now', '+7 hours', ?) ${srDayFilter}`
+  ).bind(...(code ? [windowMod, code] : [windowMod])).all();
+
+  const ratesByCodeDay = new Map(); // code -> Map(day -> number[])
+  for (const r of rateRows.results) {
+    if (!ratesByCodeDay.has(r.code)) ratesByCodeDay.set(r.code, new Map());
+    const dm = ratesByCodeDay.get(r.code);
+    if (!dm.has(r.day)) dm.set(r.day, []);
+    dm.get(r.day).push(r.rate);
+  }
+  const srByCodeDay = new Map(); // code -> Map(day -> sr_buying)
+  for (const r of srRows.results) {
+    if (!srByCodeDay.has(r.code)) srByCodeDay.set(r.code, new Map());
+    srByCodeDay.get(r.code).set(r.day, r.sr_buying);
+  }
+
+  const median = (a) => {
+    if (!a.length) return null;
+    const s = [...a].sort((x, y) => x - y);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  // The typical LOW rate that day, ignoring rates far from the day's median.
+  const robustLow = (rates) => {
+    const med = median(rates);
+    if (med === null) return null;
+    const lo = med * (1 - DAY_OUTLIER_BAND), hi = med * (1 + DAY_OUTLIER_BAND);
+    let kept = rates.filter(r => r >= lo && r <= hi);
+    if (!kept.length) kept = rates;
+    return Math.min(...kept);
+  };
+
+  const todayStr = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+  const ageDays = (day) => Math.max(0, Math.round((Date.parse(todayStr) - Date.parse(day)) / 86400000));
+
   const marginByCode = new Map();
-  for (const r of margin.results) {
-    const w = Math.pow(0.5, Math.max(0, r.age_days || 0) / MARGIN_HALF_LIFE_DAYS);
-    const e = marginByCode.get(r.code) || { wsum: 0, msum: 0, n: 0 };
-    e.wsum += w; e.msum += w * r.margin; e.n += 1;
-    marginByCode.set(r.code, e);
+  for (const [cd, dayMap] of ratesByCodeDay) {
+    const srDays = srByCodeDay.get(cd);
+    if (!srDays) continue;
+
+    let daily = [];
+    for (const [day, rates] of dayMap) {
+      const sr = srDays.get(day);
+      if (sr === undefined || sr === null) continue;
+      const low = robustLow(rates);
+      if (low === null) continue;
+      daily.push({ age: ageDays(day), margin: sr - low });
+    }
+    if (!daily.length) continue;
+
+    // Drop day-level margin outliers (median/MAD filter).
+    if (daily.length >= 4) {
+      const mMed = median(daily.map(d => d.margin));
+      const mad = median(daily.map(d => Math.abs(d.margin - mMed))) || 0;
+      if (mad > 0) daily = daily.filter(d => Math.abs(d.margin - mMed) <= MARGIN_MAD_K * mad);
+    }
+
+    // Recency-weighted mean margin.
+    let wsum = 0, msum = 0;
+    for (const d of daily) {
+      const w = Math.pow(0.5, d.age / MARGIN_HALF_LIFE_DAYS);
+      wsum += w; msum += w * d.margin;
+    }
+    marginByCode.set(cd, { avgMargin: wsum > 0 ? msum / wsum : null, samples: daily.length });
   }
 
   // Super Rich 7-day average per code, for a simple up/down/flat trend hint.
@@ -415,8 +472,8 @@ api.get('/rate-forecast', async (c) => {
 
   const out = latest.results.map(r => {
     const m = marginByCode.get(r.code);
-    const avgMargin = (m && m.wsum > 0) ? m.msum / m.wsum : null;
-    const samples = m ? m.n : 0;
+    const avgMargin = m ? m.avgMargin : null;
+    const samples = m ? m.samples : 0;
     const suggested = (r.sr_buying !== null && avgMargin !== null)
       ? Math.round((r.sr_buying - avgMargin) * 1e4) / 1e4
       : null;
@@ -539,9 +596,9 @@ app.route('/api', api);
 app.get('/trigger', async (c) => c.json(await scrapeToday(c.env)));
 
 app.get('/backfill', async (c) => {
-  const { from, to } = c.req.query();
+  const { from, to, code } = c.req.query();
   if (!from || !to) return c.json({ error: 'from=YYYY-MM-DD&to=YYYY-MM-DD required' }, 400);
-  return c.json(await backfill(c.env, from, to));
+  return c.json(await backfill(c.env, from, to, code));
 });
 
 app.get('/latest', async (c) => {
