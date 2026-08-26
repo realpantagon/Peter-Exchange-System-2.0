@@ -149,27 +149,27 @@ export default function SalesForecastPage() {
                             </div>
                         </div>
 
-                        {/* Next 7 days, day by day */}
+                        {/* Next 7 days, day by day (vertical list — symmetric on every screen) */}
                         <div>
                             <SectionLabel>รายวัน · 7 วันข้างหน้า</SectionLabel>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+                            <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: 'var(--vault-panel)', border: '1px solid var(--vault-hairline)' }}>
                                 {next7.map((f, i) => {
                                     const isPeak = f.predicted === maxNext7
-                                    const pct = Math.max(6, Math.round((f.predicted / maxNext7) * 100))
+                                    const pct = Math.max(5, Math.round((f.predicted / maxNext7) * 100))
                                     return (
-                                        <div key={f.day} className="rounded-2xl p-3.5 transition-all hover:-translate-y-0.5"
-                                            style={{ backgroundColor: isPeak ? 'var(--vault-brass-tint)' : 'var(--vault-panel)', border: `1px solid ${isPeak ? 'var(--vault-brass-border)' : 'var(--vault-hairline)'}` }}>
-                                            <div className="flex items-baseline justify-between gap-1">
-                                                <span className="text-sm font-bold" style={{ color: isPeak ? 'var(--vault-brass)' : 'var(--vault-paper)' }}>
-                                                    {DOW_FULL[f.dow]}
-                                                    {i === 0 && <span className="ml-1 text-[9px] font-bold px-1 py-px rounded align-middle" style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}>พรุ่งนี้</span>}
-                                                </span>
-                                                <span className="text-[11px] font-figure shrink-0" style={{ color: 'var(--vault-muted)' }}>{shortDay(f.day)}</span>
+                                        <div key={f.day} className="flex items-center gap-3 sm:gap-4 px-4 py-3"
+                                            style={{ borderTop: i ? '1px solid var(--vault-hairline)' : 'none', backgroundColor: isPeak ? 'var(--vault-brass-tint)' : 'transparent' }}>
+                                            <div className="w-24 sm:w-28 shrink-0">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-sm font-bold" style={{ color: isPeak ? 'var(--vault-brass)' : 'var(--vault-paper)' }}>{DOW_FULL[f.dow]}</span>
+                                                    {i === 0 && <span className="text-[9px] font-bold px-1 py-px rounded" style={{ backgroundColor: 'var(--vault-brass)', color: 'var(--vault-brass-ink)' }}>พรุ่งนี้</span>}
+                                                </div>
+                                                <div className="text-[11px] font-figure mt-0.5" style={{ color: 'var(--vault-muted)' }}>{shortDay(f.day)}</div>
                                             </div>
-                                            <div className="font-figure text-lg font-bold tabular-nums mt-2" style={{ color: 'var(--vault-paper)' }}>{compact(f.predicted)}</div>
-                                            <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--vault-hairline)' }}>
-                                                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: isPeak ? 'var(--vault-brass)' : 'var(--vault-branch-blue)', opacity: isPeak ? 1 : 0.6 }} />
+                                            <div className="flex-1 min-w-0 h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--vault-hairline)' }}>
+                                                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: isPeak ? 'var(--vault-brass)' : 'var(--vault-branch-blue)', opacity: isPeak ? 1 : 0.55 }} />
                                             </div>
+                                            <div className="w-16 sm:w-20 text-right font-figure text-base font-bold tabular-nums shrink-0" style={{ color: isPeak ? 'var(--vault-brass)' : 'var(--vault-paper)' }}>{compact(f.predicted)}</div>
                                         </div>
                                     )
                                 })}
