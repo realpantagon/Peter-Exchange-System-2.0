@@ -356,9 +356,11 @@ api.get('/superrich/latest', async (c) => {
 
 // Suggested rate to set today, per currency:
 //   suggested = Super Rich buying today − our usual margin
-// where the margin is the average gap between Super Rich buying and the rate we
-// actually gave (transactions), over the last `window` days. Also returns a
-// short-term Super Rich trend (today vs the last 7 days) as a hint.
+// The margin is the gap between Super Rich buying and OUR LOWEST rate that day
+// (transactions), recency-weighted over the last `window` days so recent pricing
+// dominates (half-life 7 days). Also returns a short-term Super Rich trend.
+const MARGIN_HALF_LIFE_DAYS = 4;
+
 api.get('/rate-forecast', async (c) => {
   const code = c.req.query('code');
   const window = Math.min(Math.max(parseInt(c.req.query('window') || '30', 10) || 30, 7), 365);
@@ -371,7 +373,8 @@ api.get('/rate-forecast', async (c) => {
      WHERE scraped_at = (SELECT MAX(scraped_at) FROM superrich_rates) ${latestWhere}`
   ).bind(...(code ? [code] : [])).all();
 
-  // Average margin (Super Rich buying − our avg rate) per code over the window.
+  // Per-day margin = Super Rich buying − our LOWEST rate that day, with the day's
+  // age so we can weight recent days more heavily in JS.
   const marginWhere = code ? 'WHERE sr.code = ?' : '';
   const margin = await c.env.DB.prepare(
     `WITH sr AS (
@@ -380,18 +383,26 @@ api.get('/rate-forecast', async (c) => {
         WHERE created_date >= date('now', '+7 hours', ?)
      ),
      ours AS (
-        SELECT currency_code AS code, date(created_at, '${SHOP_TZ_SHIFT}') AS day, AVG(rate) AS our_avg
+        SELECT currency_code AS code, date(created_at, '${SHOP_TZ_SHIFT}') AS day, MIN(rate) AS our_low
         FROM transactions
         WHERE rate IS NOT NULL AND date(created_at, '${SHOP_TZ_SHIFT}') >= date('now', '+7 hours', ?)
         GROUP BY code, day
      )
      SELECT sr.code,
-            AVG(sr.sr_buying - ours.our_avg) AS avg_margin,
-            COUNT(*) AS samples
+            CAST(julianday(date('now', '+7 hours')) - julianday(sr.day) AS INTEGER) AS age_days,
+            (sr.sr_buying - ours.our_low) AS margin
      FROM sr JOIN ours ON sr.code = ours.code AND sr.day = ours.day
-     ${marginWhere}
-     GROUP BY sr.code`
+     ${marginWhere}`
   ).bind(...(code ? [windowMod, windowMod, code] : [windowMod, windowMod])).all();
+
+  // Recency-weighted mean margin per code (weight halves every 7 days).
+  const marginByCode = new Map();
+  for (const r of margin.results) {
+    const w = Math.pow(0.5, Math.max(0, r.age_days || 0) / MARGIN_HALF_LIFE_DAYS);
+    const e = marginByCode.get(r.code) || { wsum: 0, msum: 0, n: 0 };
+    e.wsum += w; e.msum += w * r.margin; e.n += 1;
+    marginByCode.set(r.code, e);
+  }
 
   // Super Rich 7-day average per code, for a simple up/down/flat trend hint.
   const trendWhere = code ? 'AND code = ?' : '';
@@ -400,13 +411,12 @@ api.get('/rate-forecast', async (c) => {
      WHERE created_date >= date('now', '+7 hours', '-7 days') ${trendWhere} GROUP BY code`
   ).bind(...(code ? [code] : [])).all();
 
-  const marginByCode = new Map(margin.results.map(r => [r.code, r]));
   const trendByCode = new Map(trend.results.map(r => [r.code, r.sr_avg7]));
 
   const out = latest.results.map(r => {
     const m = marginByCode.get(r.code);
-    const avgMargin = m ? m.avg_margin : null;
-    const samples = m ? m.samples : 0;
+    const avgMargin = (m && m.wsum > 0) ? m.msum / m.wsum : null;
+    const samples = m ? m.n : 0;
     const suggested = (r.sr_buying !== null && avgMargin !== null)
       ? Math.round((r.sr_buying - avgMargin) * 1e4) / 1e4
       : null;

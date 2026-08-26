@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceDot,
 } from 'recharts'
 import { getRates, getRateHistory, getRateForecastFor, type RateHistoryRow, type RateForecast } from '../lib/api'
 import type { PeterExchangeRate } from '../types/database'
@@ -100,6 +100,7 @@ export default function RateHistoryPage() {
         () => rows.map(r => ({ ...r, label: shortDay(r.day) })),
         [rows]
     )
+    const lastLabel = chartData.length ? chartData[chartData.length - 1].label : undefined
 
     // Summary over the loaded window
     const summary = useMemo(() => {
@@ -176,7 +177,8 @@ export default function RateHistoryPage() {
                         </div>
                         <div className="text-[11px] text-right" style={{ color: 'var(--vault-muted)' }}>
                             = Super Rich รับซื้อ {formatRate(forecast.sr_buying)}<br />
-                            − margin เฉลี่ย {forecast.avg_margin != null ? formatRate(forecast.avg_margin) : '—'} ({forecast.samples} วัน)
+                            − margin จากเรทต่ำสุดของเรา {forecast.avg_margin != null ? formatRate(forecast.avg_margin) : '—'}<br />
+                            <span className="text-[10px]">(ถ่วงน้ำหนักวันล่าสุด · {forecast.samples} วัน)</span>
                         </div>
                     </div>
                 )}
@@ -228,10 +230,22 @@ export default function RateHistoryPage() {
                                     {forecast?.suggested != null && (
                                         <ReferenceLine
                                             y={forecast.suggested}
-                                            stroke="var(--vault-brass)"
-                                            strokeDasharray="6 4"
+                                            stroke="#D97706"
+                                            strokeDasharray="2 4"
+                                            strokeWidth={1}
+                                            ifOverflow="extendDomain"
+                                            label={{ value: `แนะนำวันนี้ ${formatRate(forecast.suggested)}`, position: 'insideBottomRight', fill: '#B45309', fontSize: isMobile ? 10 : 11 }}
+                                        />
+                                    )}
+                                    {forecast?.suggested != null && lastLabel && (
+                                        <ReferenceDot
+                                            x={lastLabel}
+                                            y={forecast.suggested}
+                                            r={5}
+                                            fill="#D97706"
+                                            stroke="#fff"
                                             strokeWidth={1.5}
-                                            label={{ value: `แนะนำ ${formatRate(forecast.suggested)}`, position: 'insideTopLeft', fill: 'var(--vault-brass)', fontSize: isMobile ? 10 : 11 }}
+                                            ifOverflow="extendDomain"
                                         />
                                     )}
                                     {SERIES.map(s => (
@@ -254,7 +268,7 @@ export default function RateHistoryPage() {
                         )}
                     </div>
                     <p className="mt-3 text-[11px]" style={{ color: 'var(--vault-muted)' }}>
-                        เส้นทึบน้ำเงิน = เรทที่เราตั้งจริง (ต่ำสุด/สูงสุดของวัน) · เส้นประเขียว = Super Rich รับซื้อ (ตัวหลักที่ใช้ทำ forecast)
+                        เส้นทึบน้ำเงิน = เรทที่เราตั้งจริง (ต่ำสุด/สูงสุดของวัน) · เส้นประเขียว = Super Rich รับซื้อ (ตัวหลักที่ใช้ทำ forecast) · จุด/เส้นส้ม = เรทแนะนำวันนี้
                     </p>
                 </div>
             </div>
