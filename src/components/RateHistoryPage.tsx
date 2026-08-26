@@ -5,12 +5,13 @@ import {
 import { getRates, getRateHistory, type RateHistoryRow } from '../lib/api'
 import type { PeterExchangeRate } from '../types/database'
 
-// Line styling — Super Rich = reference (amber/orange), our rates = blue band.
+// Line styling — Super Rich รับซื้อ is the key reference (green, prominent);
+// ขาย is secondary (faint red). Our own rates are the solid blue band.
 const SERIES = [
-    { key: 'sr_buying', name: 'Super Rich รับซื้อ', color: '#F59E0B', dash: '4 3' },
-    { key: 'sr_selling', name: 'Super Rich ขาย', color: '#FB923C', dash: '4 3' },
-    { key: 'our_min', name: 'เรทเรา ต่ำสุด', color: '#60A5FA', dash: '' },
-    { key: 'our_max', name: 'เรทเรา สูงสุด', color: '#2563EB', dash: '' },
+    { key: 'sr_buying', name: 'Super Rich รับซื้อ', color: '#16A34A', dash: '5 3', width: 2.5, opacity: 1 },
+    { key: 'our_max', name: 'เรทเรา สูงสุด', color: '#2563EB', dash: '', width: 2, opacity: 1 },
+    { key: 'our_min', name: 'เรทเรา ต่ำสุด', color: '#60A5FA', dash: '', width: 2, opacity: 1 },
+    { key: 'sr_selling', name: 'Super Rich ขาย', color: '#F87171', dash: '4 3', width: 1.5, opacity: 0.55 },
 ] as const
 
 const RANGE_OPTIONS = [
@@ -150,9 +151,8 @@ export default function RateHistoryPage() {
                 </div>
 
                 {/* Summary tiles */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <StatTile label="Super Rich ขาย (ล่าสุด)" value={formatRate(summary.latest?.sr_selling)} />
-                    <StatTile label="Super Rich รับซื้อ (ล่าสุด)" value={formatRate(summary.latest?.sr_buying)} />
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                    <StatTile label="Super Rich รับซื้อ (ล่าสุด)" value={formatRate(summary.latest?.sr_buying)} accent="#16A34A" />
                     <StatTile label="เรทเรา ต่ำสุด–สูงสุด (ช่วงนี้)" value={summary.ourLow !== null ? `${formatRate(summary.ourLow)} – ${formatRate(summary.ourHigh)}` : '—'} />
                     <StatTile label="จำนวนรายการ (ช่วงนี้)" value={summary.totalTxns.toLocaleString('th-TH')} />
                 </div>
@@ -202,9 +202,10 @@ export default function RateHistoryPage() {
                                             dataKey={s.key}
                                             name={s.name}
                                             stroke={s.color}
-                                            strokeWidth={2}
+                                            strokeWidth={s.width}
+                                            strokeOpacity={s.opacity}
                                             strokeDasharray={s.dash || undefined}
-                                            dot={{ r: 2, fill: s.color }}
+                                            dot={s.opacity < 1 ? false : { r: 2, fill: s.color }}
                                             activeDot={{ r: 5 }}
                                             connectNulls
                                         />
@@ -214,7 +215,7 @@ export default function RateHistoryPage() {
                         )}
                     </div>
                     <p className="mt-3 text-[11px]" style={{ color: 'var(--vault-muted)' }}>
-                        เส้นทึบ = เรทที่เราตั้งจริงจากรายการซื้อขาย (ต่ำสุด/สูงสุดของวัน) · เส้นประ = เรทอ้างอิง Super Rich วันนั้น
+                        เส้นทึบน้ำเงิน = เรทที่เราตั้งจริง (ต่ำสุด/สูงสุดของวัน) · เส้นประเขียว = Super Rich รับซื้อ (หลัก) · เส้นประแดงจาง = Super Rich ขาย
                     </p>
                 </div>
             </div>
@@ -222,11 +223,11 @@ export default function RateHistoryPage() {
     )
 }
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({ label, value, accent }: { label: string; value: string; accent?: string }) {
     return (
         <div className="rounded-2xl p-3 sm:p-4" style={{ backgroundColor: 'var(--vault-panel-raised)', border: '1px solid var(--vault-hairline)' }}>
             <div className="text-[11px] mb-1 leading-tight" style={{ color: 'var(--vault-muted)' }}>{label}</div>
-            <div className="font-figure text-base sm:text-lg font-bold tabular-nums" style={{ color: 'var(--vault-paper)' }}>{value}</div>
+            <div className="font-figure text-base sm:text-lg font-bold tabular-nums" style={{ color: accent ?? 'var(--vault-paper)' }}>{value}</div>
         </div>
     )
 }
