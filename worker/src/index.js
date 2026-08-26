@@ -65,11 +65,22 @@ function extractRows(exchangeRate, createdDate, scrapedAt) {
 
 async function insertRows(env, rows) {
   if (!rows.length) return;
+  // Upsert on (created_date, code): the first scrape of the day inserts, and every
+  // later scrape that day (cron re-run or a manual /refresh) UPDATES the same row
+  // with the current rate. `INSERT OR IGNORE` used to drop these, so the rate was
+  // frozen at whatever the first scrape of the day saw and never moved intraday.
   const stmts = rows.map((r) =>
     env.DB.prepare(
-      `INSERT OR IGNORE INTO superrich_rates
+      `INSERT INTO superrich_rates
        (scraped_at, code, currency, country_name, denomination, buying, selling, created_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(created_date, code) DO UPDATE SET
+         scraped_at   = excluded.scraped_at,
+         currency     = excluded.currency,
+         country_name = excluded.country_name,
+         denomination = excluded.denomination,
+         buying       = excluded.buying,
+         selling      = excluded.selling`
     ).bind(r.scrapedAt, r.code, r.currency, r.countryName, r.denom, r.buying, r.selling, r.createdDate)
   );
   await env.DB.batch(stmts);

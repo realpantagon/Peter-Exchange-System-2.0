@@ -6,12 +6,12 @@ import { getRates, getRateHistory, getRateForecastFor, type RateHistoryRow, type
 import type { PeterExchangeRate } from '../types/database'
 
 // Line styling — Super Rich รับซื้อ is the key reference (green, prominent);
-// ขาย is secondary (faint red). Our own rates are the solid blue band.
+// it's the only Super Rich figure that matters for our forecast, so ขาย is not
+// plotted. Our own rates are the solid blue band.
 const SERIES = [
     { key: 'sr_buying', name: 'Super Rich รับซื้อ', color: '#16A34A', dash: '5 3', width: 2.5, opacity: 1 },
     { key: 'our_max', name: 'เรทเรา สูงสุด', color: '#2563EB', dash: '', width: 2, opacity: 1 },
     { key: 'our_min', name: 'เรทเรา ต่ำสุด', color: '#60A5FA', dash: '', width: 2, opacity: 1 },
-    { key: 'sr_selling', name: 'Super Rich ขาย', color: '#F87171', dash: '4 3', width: 1.5, opacity: 0.55 },
 ] as const
 
 const RANGE_OPTIONS = [
@@ -254,7 +254,7 @@ export default function RateHistoryPage() {
                         )}
                     </div>
                     <p className="mt-3 text-[11px]" style={{ color: 'var(--vault-muted)' }}>
-                        เส้นทึบน้ำเงิน = เรทที่เราตั้งจริง (ต่ำสุด/สูงสุดของวัน) · เส้นประเขียว = Super Rich รับซื้อ (หลัก) · เส้นประแดงจาง = Super Rich ขาย
+                        เส้นทึบน้ำเงิน = เรทที่เราตั้งจริง (ต่ำสุด/สูงสุดของวัน) · เส้นประเขียว = Super Rich รับซื้อ (ตัวหลักที่ใช้ทำ forecast)
                     </p>
                 </div>
             </div>
