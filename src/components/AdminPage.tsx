@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { getRates, updateRate, refreshSuperrichRates, getSuperrichLatest, getRateForecast, type SuperrichRate, type RateForecast } from '../lib/api'
 import { getFlagIcon } from '../utils/currencyUtils'
 import type { PeterExchangeRate } from '../types/database'
+import Spinner, { LoadingBlock } from './Spinner'
 
 // Super Rich rates span 0.02 (KRW) to 44 (GBP) — adapt precision to magnitude.
 const formatSR = (v: number | null | undefined) => {
@@ -124,6 +125,9 @@ export default function AdminPage() {
           </div>
 
           <div className="divide-y divide-gray-100 overflow-y-auto flex-1">
+            {rates.length === 0 && (
+              <div className="py-12 text-gray-400"><LoadingBlock label="กำลังโหลดเรท…" /></div>
+            )}
             {rates.map((rate) => {
               const sr = rate.Cur ? superrich[rate.Cur] : undefined
               const fc = rate.Cur ? forecast[rate.Cur] : undefined
@@ -185,9 +189,10 @@ export default function AdminPage() {
                         <button
                           onClick={() => saveEdit(rate.id)}
                           disabled={loading}
-                          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium disabled:opacity-50"
+                          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          {loading ? 'Saving...' : 'Save Changes'}
+                          {loading && <Spinner size={16} />}
+                          {loading ? 'กำลังบันทึก...' : 'Save Changes'}
                         </button>
                         <button
                           onClick={cancelEdit}
@@ -216,7 +221,7 @@ export default function AdminPage() {
 
                       {/* Super Rich buying (green) */}
                       <div className="text-right font-mono text-sm font-semibold text-green-600 tabular-nums">
-                        {sr ? formatSR(sr.buying) : (srLoading ? <span className="text-gray-300">…</span> : <span className="text-gray-300">-</span>)}
+                        {sr ? formatSR(sr.buying) : (srLoading ? <Spinner size={13} className="text-green-500 inline-block align-middle" /> : <span className="text-gray-300">-</span>)}
                       </div>
 
                       {/* Rate (current) + suggested */}

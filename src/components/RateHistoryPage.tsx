@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import { getRates, getRateHistory, getRateForecastFor, type RateHistoryRow, type RateForecast } from '../lib/api'
 import type { PeterExchangeRate } from '../types/database'
+import Spinner from './Spinner'
 
 // Line styling — Super Rich รับซื้อ is the key reference (green, prominent);
 // it's the only Super Rich figure that matters for our forecast, so ขาย is not
@@ -196,8 +197,9 @@ export default function RateHistoryPage() {
                     </h3>
                     <div className="h-[300px] sm:h-[380px] w-full relative">
                         {loading && (
-                            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.65)' }}>
-                                <span className="text-xs font-medium" style={{ color: 'var(--vault-muted)' }}>กำลังโหลดข้อมูล…</span>
+                            <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.65)', color: 'var(--vault-muted)' }}>
+                                <Spinner size={22} />
+                                <span className="text-xs font-medium">กำลังโหลดข้อมูล…</span>
                             </div>
                         )}
                         {error ? (
@@ -231,10 +233,10 @@ export default function RateHistoryPage() {
                                         <ReferenceLine
                                             y={forecast.suggested}
                                             stroke="#D97706"
-                                            strokeDasharray="2 4"
-                                            strokeWidth={1}
+                                            strokeDasharray="6 4"
+                                            strokeWidth={1.5}
                                             ifOverflow="extendDomain"
-                                            label={{ value: `แนะนำวันนี้ ${formatRate(forecast.suggested)}`, position: 'insideBottomRight', fill: '#B45309', fontSize: isMobile ? 10 : 11 }}
+                                            label={{ value: `⭐ แนะนำ ${formatRate(forecast.suggested)}`, position: 'insideTopLeft', fill: '#B45309', fontSize: isMobile ? 11 : 12, fontWeight: 700, dy: -4 }}
                                         />
                                     )}
                                     {forecast?.suggested != null && lastLabel && (

@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 import type { Transaction } from '../../utils/currencyUtils'
 import { getTransactions, type DailySalesRow } from '../../lib/api'
+import Spinner from '../Spinner'
 
 interface DailySalesAnalyticsProps {
     /** Daily totals per branch for the whole range (summed by the Worker). */
@@ -193,7 +194,7 @@ function DetailBody({ detail, detailKey, branchColor, withCount }: {
     withCount?: boolean
 }) {
     if (!detail || detail.key !== detailKey || detail.loading) {
-        return <div className="text-xs py-2" style={{ color: 'var(--vault-muted)' }}>กำลังโหลดรายการ…</div>
+        return <div className="flex items-center gap-2 text-xs py-2" style={{ color: 'var(--vault-muted)' }}><Spinner size={14} />กำลังโหลดรายการ…</div>
     }
     if (detail.error) {
         return <div className="text-xs py-2" style={{ color: 'var(--vault-ink-debit)' }}>โหลดรายการไม่สำเร็จ ลองแตะอีกครั้ง</div>
@@ -618,7 +619,7 @@ export default function DailySalesAnalytics({ daily, rangeDays, setRangeDays, lo
             <div className="h-[260px] sm:h-[320px] w-full relative">
                 {loading && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.65)' }}>
-                        <span className="text-xs font-medium" style={{ color: 'var(--vault-muted)' }}>กำลังโหลดข้อมูล…</span>
+                        <span className="flex items-center gap-2 text-xs font-medium" style={{ color: 'var(--vault-muted)' }}><Spinner size={20} />กำลังโหลดข้อมูล…</span>
                     </div>
                 )}
                 <ResponsiveContainer width="100%" height="100%">

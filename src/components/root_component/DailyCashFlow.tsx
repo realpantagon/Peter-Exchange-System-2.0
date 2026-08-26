@@ -8,6 +8,7 @@ import {
 } from '../../lib/api'
 import type { PeterExchangeBalanceLog } from '../../types/database'
 import type { Transaction } from '../../utils/currencyUtils'
+import { LoadingBlock } from '../Spinner'
 
 interface DailyCashFlowProps {
     transactions: Transaction[]
@@ -138,7 +139,7 @@ export default function DailyCashFlow({ transactions, notify, branchId, date, is
             {!collapsed && (
             <div className="p-2.5 sm:p-3 space-y-2.5">
                 {loading ? (
-                    <div className="text-sm py-6 text-center" style={{ color: 'var(--vault-muted)' }}>กำลังโหลด...</div>
+                    <div className="py-6"><LoadingBlock /></div>
                 ) : branches.length === 0 ? (
                     <div className="text-sm py-6 text-center" style={{ color: 'var(--vault-muted)' }}>ไม่มีข้อมูลร้านในช่วงที่ดึงมา</div>
                 ) : (

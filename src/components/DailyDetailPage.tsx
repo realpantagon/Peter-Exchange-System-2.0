@@ -3,6 +3,7 @@ import { getTransactions } from '../lib/api'
 import type { Transaction } from '../utils/currencyUtils'
 import ClientTimeAnalytics from './root_component/ClientTimeAnalytics'
 import Toast from './system_component/Toast'
+import { LoadingBlock } from './Spinner'
 
 const BRANCH_COLORS: { [b: string]: string } = { '4': '#2563EB', '11': '#EAB308' }
 const FALLBACK = ['#16A34A', '#EA580C', '#9333EA', '#DB2777', '#0891B2']
@@ -104,7 +105,7 @@ export default function DailyDetailPage() {
                     </div>
                     <div className="overflow-x-auto">
                         {loading ? (
-                            <div className="p-10 text-center text-gray-400">กำลังโหลด...</div>
+                            <div className="p-10 text-gray-400"><LoadingBlock label="กำลังโหลดรายการ…" /></div>
                         ) : timeline.length === 0 ? (
                             <div className="p-10 text-center text-gray-400">ไม่มีรายการในวันนี้</div>
                         ) : (
