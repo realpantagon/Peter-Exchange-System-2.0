@@ -245,6 +245,23 @@ export default function AdminPage() {
             })}
           </div>
         </div>
+
+        {/* Legend */}
+        <div className="max-w-md mx-auto w-full mt-3 px-1 text-[11px] text-gray-500 leading-relaxed">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span className="flex items-center gap-1"><span className="font-semibold text-green-600">32.650</span> = Super Rich รับซื้อ</span>
+            <span className="flex items-center gap-1">
+              <span className="text-gray-500">แนะนำ</span>
+              <span className="font-semibold text-blue-600">32.000</span> = เรทที่ควรตั้งวันนี้
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+            <span className="text-gray-500">ลูกศร = แนวโน้ม Super Rich (7 วัน):</span>
+            <span className="flex items-center gap-1"><span className="text-green-600">▲</span> ขาขึ้น</span>
+            <span className="flex items-center gap-1"><span className="text-red-500">▼</span> ขาลง</span>
+            <span className="flex items-center gap-1"><span className="text-gray-400">▬</span> ทรงตัว</span>
+          </div>
+        </div>
       </div>
     </div>
   )
