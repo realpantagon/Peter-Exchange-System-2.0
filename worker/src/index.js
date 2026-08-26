@@ -644,7 +644,7 @@ api.get('/sales-forecast', async (c) => {
 // the actual — so this answers "does the forecast meet expectations?".
 api.get('/sales-forecast/backtest', async (c) => {
   const branch = c.req.query('branch');
-  const days = Math.min(Math.max(parseInt(c.req.query('days') || '30', 10) || 30, 7), 31);
+  const days = Math.min(Math.max(parseInt(c.req.query('days') || '90', 10) || 90, 7), 120);
   const lookback = 90;
   const ref = shopToday();
   const dayMs = 86400000;
