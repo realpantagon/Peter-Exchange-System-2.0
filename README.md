@@ -89,15 +89,16 @@ The scraper keeps its original unauthenticated paths: `/trigger`,
    pnpm secret:api-key
    ```
 
-3. Start both servers — the app on 5173, the API on 8787:
+3. Start everything with one command — runs the app (5173) and the Worker/API
+   (8787) together via `concurrently`:
 
    ```sh
-   pnpm dev         # in one terminal
-   pnpm dev:worker  # in another
+   pnpm dev
    ```
 
-   `pnpm dev:worker` runs against the **remote** D1 database by default flags in
-   `wrangler dev`; add `--local` if you want an isolated local copy.
+   Vite proxies `/api` → the Worker, which runs against the **remote** D1
+   database (real data). Need them apart? `pnpm dev:web` and `pnpm dev:worker`
+   run each half on its own.
 
 ## Database
 
@@ -127,8 +128,9 @@ for reference — it is not part of the normal workflow.
 
 ## Scripts
 
-- `pnpm dev` — start the Vite dev server
-- `pnpm dev:worker` — start the Worker (API) on port 8787
+- `pnpm dev` — start the app (5173) **and** the Worker/API (8787) together
+- `pnpm dev:web` — start only the Vite dev server
+- `pnpm dev:worker` — start only the Worker (API) on port 8787 (remote D1)
 - `pnpm build` — type-check and build for production
 - `pnpm lint` — run ESLint
 - `pnpm preview` — preview the production build locally
