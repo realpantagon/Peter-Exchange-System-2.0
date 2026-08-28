@@ -5,8 +5,9 @@
 import { writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 
-const SUPERRICH_HISTORY = 'https://www.superrichthailand.com/api/v1/rates/history';
-const SUPERRICH_AUTH = 'Basic c3VwZXJyaWNoVGg6aFRoY2lycmVwdXM=';
+// See worker/src/index.js for context on the Aug 2026 Super Rich site relaunch.
+const SUPERRICH_LIST = 'https://api.superrichthailand.com/api/v1/exchange-client/list';
+const SUPERRICH_BRANCH_ID = 10;
 
 const CURRENCY_MAP = {
   USD: [
@@ -17,7 +18,7 @@ const CURRENCY_MAP = {
   EUR: [{ code: 'EUR', denoms: null }],
   JPY: [{ code: 'JPY', denoms: null }],
   GBP: [{ code: 'GBP', denoms: null }],
-  SGD: [{ code: 'SGD', denoms: null }],
+  SGD: [{ code: 'SGD', denoms: ['100 - 50', '100-50', '100', '50', '20 - 5', '20-5'] }],
   AUD: [{ code: 'AUD', denoms: null }],
   CHF: [{ code: 'CHF', denoms: null }],
   HKD: [{ code: 'HKD', denoms: null }],
@@ -29,24 +30,24 @@ const CURRENCY_MAP = {
   KRW: [{ code: 'KRW', denoms: null }],
 };
 
-function extractRows(exchangeRate, createdDate, scrapedAt) {
+function extractRows(exchange, createdDate, scrapedAt) {
   const rows = [];
-  for (const cur of exchangeRate) {
-    const rules = CURRENCY_MAP[cur.cUnit];
+  for (const [unit, denoms] of Object.entries(exchange)) {
+    const rules = CURRENCY_MAP[unit];
     if (!rules) continue;
     for (const rule of rules) {
       const rate = rule.denoms === null
-        ? cur.rate[0]
-        : cur.rate.find((r) => rule.denoms.includes(r.denom?.trim()));
+        ? denoms[0]
+        : denoms.find((r) => rule.denoms.includes(r.denomRem?.trim()));
       if (!rate) continue;
       rows.push({
         scrapedAt: scrapedAt.replace(/'/g, "''"),
         code: rule.code,
-        currency: cur.cUnit,
-        countryName: cur.countryName.replace(/'/g, "''"),
-        denom: (rate.denom || '').replace(/'/g, "''"),
-        buying: rate.cBuying,
-        selling: rate.cSelling,
+        currency: unit,
+        countryName: null,
+        denom: (rate.denomRem || '').replace(/'/g, "''"),
+        buying: Number(rate.buyText),
+        selling: Number(rate.sellText),
         createdDate,
       });
     }
@@ -63,15 +64,12 @@ function generateDates(from, to) {
 }
 
 async function fetchDate(dateStr) {
-  const [yyyy, mm, dd] = dateStr.split('-');
-  const r = await fetch(SUPERRICH_HISTORY, {
-    method: 'POST',
-    headers: { Authorization: SUPERRICH_AUTH, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `date=${mm}-${dd}-${yyyy}`,
+  const r = await fetch(`${SUPERRICH_LIST}?branchId=${SUPERRICH_BRANCH_ID}&type=exchange-history&date=${dateStr}`, {
+    headers: { Accept: 'application/json' },
   });
   const json = await r.json();
-  if (json.code !== 20000 || !json.data?.exchangeRate?.length) return null;
-  return json.data.exchangeRate;
+  if (json.statusCode !== 200 || !json.data?.exchange || !Object.keys(json.data.exchange).length) return null;
+  return json.data.exchange;
 }
 
 async function main() {
@@ -85,10 +83,10 @@ async function main() {
 
   for (const date of dates) {
     try {
-      const rates = await fetchDate(date);
-      if (rates) {
-        const scrapedAt = rates[0]?.rate?.[0]?.dateTime || new Date().toISOString();
-        allRows.push(...extractRows(rates, date, scrapedAt));
+      const exchange = await fetchDate(date);
+      if (exchange) {
+        const scrapedAt = `${date}T12:00:00.000Z`;
+        allRows.push(...extractRows(exchange, date, scrapedAt));
         done++;
       } else {
         failed++;
@@ -110,7 +108,7 @@ async function main() {
   for (let i = 0; i < allRows.length; i += BATCH) {
     const batch = allRows.slice(i, i + BATCH);
     const vals = batch.map(
-      (r) => `('${r.scrapedAt}','${r.code}','${r.currency}','${r.countryName}','${r.denom}',${r.buying},${r.selling},'${r.createdDate}')`
+      (r) => `('${r.scrapedAt}','${r.code}','${r.currency}',NULL,'${r.denom}',${r.buying},${r.selling},'${r.createdDate}')`
     ).join(',\n');
     const sql = `INSERT OR IGNORE INTO superrich_rates (scraped_at,code,currency,country_name,denomination,buying,selling,created_date) VALUES\n${vals};`;
 

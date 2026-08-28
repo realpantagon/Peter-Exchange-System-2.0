@@ -6,9 +6,15 @@ import { z } from 'zod';
 // Super Rich rate scraper — unchanged behaviour, now mounted on a Hono app.
 // =============================================================================
 
-const SUPERRICH_CURRENT = 'https://www.superrichthailand.com/web/api/v1/rates';
-const SUPERRICH_HISTORY = 'https://www.superrichthailand.com/api/v1/rates/history';
-const SUPERRICH_AUTH = 'Basic c3VwZXJyaWNoVGg6aFRoY2lycmVwdXM=';
+// Super Rich relaunched superrichthailand.com (Aug 2026) on a new Next.js
+// site backed by api.superrichthailand.com; the old web/api/v1/rates +
+// api/v1/rates/history endpoints now 404. This hits the new public
+// exchange-client API instead — no auth header needed, unlike the old one.
+// branchId 10 = "Headquarter Rajdamri 1" (branchCode H01), picked because its
+// numbers pick up right where the old site-wide feed left off (checked against
+// the last superrich_rates row before the switch).
+const SUPERRICH_LIST = 'https://api.superrichthailand.com/api/v1/exchange-client/list';
+const SUPERRICH_BRANCH_ID = 10;
 
 // Currency filter — only store these codes
 // USD is split by denomination into 3 codes
@@ -35,29 +41,29 @@ const CURRENCY_MAP = {
   KRW: [{ code: 'KRW', denoms: null }],
 };
 
-function extractRows(exchangeRate, createdDate, scrapedAt) {
+function extractRows(exchange, createdDate, scrapedAt) {
   const rows = [];
-  for (const cur of exchangeRate) {
-    const rules = CURRENCY_MAP[cur.cUnit];
+  for (const [unit, denoms] of Object.entries(exchange)) {
+    const rules = CURRENCY_MAP[unit];
     if (!rules) continue; // skip currencies not in list
 
     for (const rule of rules) {
       let rate;
       if (rule.denoms === null) {
         // Take the first (highest) denomination
-        rate = cur.rate[0];
+        rate = denoms[0];
       } else {
-        rate = cur.rate.find((r) => rule.denoms.includes(r.denom?.trim()));
+        rate = denoms.find((r) => rule.denoms.includes(r.denomRem?.trim()));
       }
       if (!rate) continue;
       rows.push({
         scrapedAt,
         code: rule.code,
-        currency: cur.cUnit,
-        countryName: cur.countryName,
-        denom: rate.denom,
-        buying: rate.cBuying,
-        selling: rate.cSelling,
+        currency: unit,
+        countryName: null, // the new API doesn't return this
+        denom: rate.denomRem,
+        buying: Number(rate.buyText),
+        selling: Number(rate.sellText),
         createdDate,
       });
     }
@@ -89,16 +95,16 @@ async function insertRows(env, rows) {
 }
 
 async function scrapeToday(env) {
-  const r = await fetch(SUPERRICH_CURRENT, {
-    headers: { Authorization: SUPERRICH_AUTH, Accept: 'application/json' },
+  const r = await fetch(`${SUPERRICH_LIST}?branchId=${SUPERRICH_BRANCH_ID}&type=exchange`, {
+    headers: { Accept: 'application/json' },
   });
   if (!r.ok) throw new Error(`Current API ${r.status}`);
   const json = await r.json();
-  if (json.code !== 20000) throw new Error(json.descriptionEn);
+  if (json.statusCode !== 200) throw new Error(json.message);
 
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
-  const rows = extractRows(json.data.exchangeRate, today, now);
+  const rows = extractRows(json.data.exchange, today, now);
   await insertRows(env, rows);
   return { success: true, scraped_at: now, codes_saved: rows.map((r) => r.code) };
 }
@@ -115,7 +121,6 @@ async function backfill(env, fromStr, toStr, code) {
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     const createdDate = `${yyyy}-${mm}-${dd}`;
-    const apiDate = `${mm}-${dd}-${yyyy}`;
 
     const exists = code
       ? await env.DB.prepare('SELECT 1 FROM superrich_rates WHERE created_date = ? AND code = ? LIMIT 1').bind(createdDate, code).first()
@@ -123,15 +128,15 @@ async function backfill(env, fromStr, toStr, code) {
     if (exists) { skipped++; continue; }
 
     try {
-      const r = await fetch(SUPERRICH_HISTORY, {
-        method: 'POST',
-        headers: { Authorization: SUPERRICH_AUTH, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `date=${apiDate}`,
+      // type=exchange-history + date=YYYY-MM-DD returns that day's snapshot;
+      // the new API doesn't echo back a timestamp for it, so scrapedAt is a placeholder.
+      const r = await fetch(`${SUPERRICH_LIST}?branchId=${SUPERRICH_BRANCH_ID}&type=exchange-history&date=${createdDate}`, {
+        headers: { Accept: 'application/json' },
       });
       const json = await r.json();
-      if (json.code === 20000 && json.data?.exchangeRate?.length) {
-        const scrapedAt = json.data.exchangeRate[0]?.rate?.[0]?.dateTime || new Date().toISOString();
-        let rows = extractRows(json.data.exchangeRate, createdDate, scrapedAt);
+      if (json.statusCode === 200 && json.data?.exchange && Object.keys(json.data.exchange).length) {
+        const scrapedAt = `${createdDate}T12:00:00.000Z`;
+        let rows = extractRows(json.data.exchange, createdDate, scrapedAt);
         if (code) rows = rows.filter((row) => row.code === code);
         await insertRows(env, rows);
         saved++;

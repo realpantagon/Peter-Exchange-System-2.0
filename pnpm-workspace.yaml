@@ -1,6 +1,8 @@
 allowBuilds:
   esbuild: true
   usb: true
+  workerd: true
 onlyBuiltDependencies:
   - esbuild
   - usb
+  - workerd
