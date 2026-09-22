@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ReferenceDot,
 } from 'recharts'
@@ -51,6 +52,7 @@ function useIsMobile() {
 }
 
 export default function RateHistoryPage() {
+    const location = useLocation()
     const [currencies, setCurrencies] = useState<PeterExchangeRate[]>([])
     const [code, setCode] = useState<string>('USD')
     const [rangeDays, setRangeDays] = useState<number>(30)
@@ -99,7 +101,7 @@ export default function RateHistoryPage() {
         }
         load()
         return () => { cancelled = true }
-    }, [code, rangeDays])
+    }, [code, rangeDays, location.pathname])
 
     const chartData = useMemo(
         () => rows.map(r => ({ ...r, label: shortDay(r.day) })),
@@ -111,10 +113,11 @@ export default function RateHistoryPage() {
     const summary = useMemo(() => {
         const our = rows.filter(r => r.our_min !== null)
         const totalTxns = rows.reduce((s, r) => s + (r.count || 0), 0)
+        const filteredCount = rows.reduce((s, r) => s + (r.filtered_count || 0), 0)
         const latest = rows[rows.length - 1]
         const ourLow = our.length ? Math.min(...our.map(r => r.our_min as number)) : null
         const ourHigh = our.length ? Math.max(...our.map(r => r.our_max as number)) : null
-        return { totalTxns, latest, ourLow, ourHigh, daysWithSales: our.length }
+        return { totalTxns, filteredCount, latest, ourLow, ourHigh, daysWithSales: our.length }
     }, [rows])
 
     const currencyLabel = useMemo(() => {
@@ -206,7 +209,7 @@ export default function RateHistoryPage() {
                 {/* Summary tiles */}
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                     <StatTile label="Super Rich รับซื้อ (ล่าสุด)" value={formatRate(summary.latest?.sr_buying)} accent="#16A34A" />
-                    <StatTile label="เรทเรา ต่ำสุด–สูงสุด (ช่วงนี้)" value={summary.ourLow !== null ? `${formatRate(summary.ourLow)} – ${formatRate(summary.ourHigh)}` : '—'} />
+                    <StatTile label="เรทเรา ต่ำสุด–สูงสุด (กรองเรทหลุดแล้ว)" value={summary.ourLow !== null ? `${formatRate(summary.ourLow)} – ${formatRate(summary.ourHigh)}` : '—'} />
                 </div>
 
                 {/* Chart */}
@@ -281,7 +284,7 @@ export default function RateHistoryPage() {
                                             strokeDasharray={s.dash || undefined}
                                             dot={s.opacity < 1 ? false : { r: 2, fill: s.color }}
                                             activeDot={{ r: 5 }}
-                                            connectNulls
+                                            connectNulls={s.key === 'sr_buying'}
                                         />
                                     ))}
                                 </LineChart>
@@ -289,6 +292,9 @@ export default function RateHistoryPage() {
                         )}
                     </div>
                     <p className="mt-3 text-[11px]" style={{ color: 'var(--vault-muted)' }}>
+                        กรองเรทที่ห่างจากกลุ่มปกติเกิน 6% โดยเทียบวันใกล้เคียง ±7 วันเมื่อมีข้อมูลเพียงพอ มิฉะนั้นใช้ค่ากลางของวัน · กรองออก {summary.filteredCount.toLocaleString()} จาก {summary.totalTxns.toLocaleString()} รายการ · ไม่ลบรายการแลกเงินจริง
+                    </p>
+                    <p className="mt-2 text-[11px]" style={{ color: 'var(--vault-muted)' }}>
                         เส้นทึบน้ำเงิน = เรทที่เราตั้งจริง (ต่ำสุด/สูงสุดของวัน) · เส้นประเขียว = Super Rich รับซื้อ (ตัวหลักที่ใช้ทำ forecast) · จุด/เส้นส้ม = เรทแนะนำวันนี้
                     </p>
                 </div>

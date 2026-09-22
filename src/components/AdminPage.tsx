@@ -4,6 +4,9 @@ import { getRates, updateRate, refreshSuperrichRates, getSuperrichLatest, getRat
 import { getFlagIcon } from '../utils/currencyUtils'
 import type { PeterExchangeRate } from '../types/database'
 import Spinner, { LoadingBlock } from './Spinner'
+import useInvestingRates from '../hooks/useInvestingRates'
+import InvestingQuote from './InvestingQuote'
+import { investingCurrency } from '../lib/investing'
 
 // Super Rich rates span 0.02 (KRW) to 44 (GBP) — adapt precision to magnitude.
 const formatSR = (v: number | null | undefined) => {
@@ -22,6 +25,7 @@ const TrendArrow = ({ t }: { t: RateForecast['sr_trend'] }) => {
 
 export default function AdminPage() {
   const location = useLocation()
+  const investing = useInvestingRates(location.pathname === '/admin2025')
   const [rates, setRates] = useState<PeterExchangeRate[]>([])
   const [superrich, setSuperrich] = useState<Record<string, SuperrichRate>>({})
   const [forecast, setForecast] = useState<Record<string, RateForecast>>({})
@@ -112,13 +116,17 @@ export default function AdminPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-lg shadow border border-gray-200 flex-1 flex flex-col max-w-md mx-auto w-full">
+        <div className="bg-white rounded-lg shadow border border-gray-200 flex-1 flex flex-col max-w-2xl mx-auto w-full">
           {/* Header row */}
-          <div className="grid grid-cols-[28px_1fr_64px_96px_20px] gap-2 p-2 bg-gray-100 border-b border-gray-200 text-sm font-medium text-gray-700 items-center">
+          <div className="grid grid-cols-[24px_minmax(36px,1fr)_60px_88px_80px_20px] gap-1 p-2 bg-gray-100 border-b border-gray-200 text-xs font-medium text-gray-700 items-center">
             <div />
             <div>Currency</div>
             <div className="flex flex-col items-end leading-none">
               <img src="/super-rich.jpeg" alt="Super Rich" className="h-5 w-auto rounded object-contain" />
+            </div>
+            <div className="flex flex-col items-end gap-0.5">
+              <img src="/investing-logo.png" alt="Investing.com" className="h-7 w-7 rounded object-contain" />
+              <div className="text-[9px] font-normal">เรทตลาด</div>
             </div>
             <div className="text-right">Rate</div>
             <div />
@@ -131,8 +139,9 @@ export default function AdminPage() {
             {rates.map((rate) => {
               const sr = rate.Cur ? superrich[rate.Cur] : undefined
               const fc = rate.Cur ? forecast[rate.Cur] : undefined
+              const market = investing.quotes[investingCurrency(rate.Cur || '')]
               return (
-                <div key={rate.id} className={`${editingId === rate.id ? 'bg-blue-50 p-3 border-2 border-blue-300' : 'grid grid-cols-[28px_1fr_64px_96px_20px] gap-2 px-2 py-1.5 items-center hover:bg-gray-50'} transition-all`}>
+                <div key={rate.id} className={`${editingId === rate.id ? 'bg-blue-50 p-3 border-2 border-blue-300' : 'grid grid-cols-[24px_minmax(36px,1fr)_60px_88px_80px_20px] gap-1 px-2 py-1.5 items-center hover:bg-gray-50'} transition-all`}>
                   {editingId === rate.id ? (
                     // Expanded edit mode layout
                     <div className="space-y-3">
@@ -151,6 +160,10 @@ export default function AdminPage() {
                             {formatSR(sr.buying)}
                           </span>
                         )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span className="flex items-center gap-1.5"><img src="/investing-logo.png" alt="Investing.com" className="h-6 w-6 rounded object-contain" />เรทตลาด</span><InvestingQuote quote={market} now={investing.now} connected={investing.status === 'live'} expanded />
                       </div>
 
                       {/* Input field */}
@@ -224,6 +237,8 @@ export default function AdminPage() {
                         {sr ? formatSR(sr.buying) : (srLoading ? <Spinner size={13} className="text-green-500 inline-block align-middle" /> : <span className="text-gray-300">-</span>)}
                       </div>
 
+                      <div className="text-right"><InvestingQuote quote={market} now={investing.now} connected={investing.status === 'live'} /></div>
+
                       {/* Rate (current) + suggested */}
                       <div className="text-right leading-tight">
                         <div className="font-mono text-sm text-gray-900 tabular-nums">{rate.Rate}</div>
@@ -252,7 +267,16 @@ export default function AdminPage() {
         </div>
 
         {/* Legend */}
-        <div className="max-w-md mx-auto w-full mt-3 px-1 text-[11px] text-gray-500 leading-relaxed">
+        <div className="max-w-2xl mx-auto w-full mt-3 px-1 text-[11px] text-gray-500 leading-relaxed">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span>Investing.com = บาทต่อ 1 หน่วย · USD ทุกชนิดใช้เรทตลาดเดียวกัน</span>
+            <span className={`shrink-0 ${investing.status === 'live' ? 'text-green-600' : 'text-amber-700'}`} role="status">
+              {investing.status === 'live' ? '● เชื่อมต่อเรียลไทม์' : investing.status === 'reconnecting' ? 'กำลังเชื่อมต่อใหม่…' : investing.status === 'paused' ? 'พักการเชื่อมต่อ' : 'กำลังเชื่อมต่อ…'}
+            </span>
+          </div>
+          <p className="mb-2" role="status">
+            ราคาเปลี่ยนอัตโนมัติเมื่อ Investing.com ส่งข้อมูล · เวลาใต้ราคาเป็นเวลาตลาด · สกุลเงินอาจอัปเดตไม่พร้อมกัน
+          </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="flex items-center gap-1"><span className="font-semibold text-green-600">32.650</span> = Super Rich รับซื้อ</span>
             <span className="flex items-center gap-1">

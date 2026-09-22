@@ -162,6 +162,8 @@ export interface RateHistoryRow {
     our_max: number | null   // highest rate we gave that day
     our_avg: number | null   // average rate we gave that day
     count: number            // number of our transactions that day
+    filtered_count: number   // excluded from chart statistics only
+    kept_count: number
 }
 
 export const getRateHistory = async (code: string, from?: string, to?: string): Promise<RateHistoryRow[]> => {

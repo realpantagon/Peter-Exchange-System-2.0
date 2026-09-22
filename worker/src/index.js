@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
+import { summarizeRateHistory } from './rate-history.js';
 
 // =============================================================================
 // Super Rich rate scraper — unchanged behaviour, now mounted on a Hono app.
@@ -307,28 +308,30 @@ api.get('/rate-history', async (c) => {
   // The rates we quoted, bucketed into Bangkok-local days like /summary/daily.
   const txWhere = ['currency_code = ?', 'rate IS NOT NULL'];
   const txBinds = [code];
-  if (from) { txWhere.push(`date(created_at, '${SHOP_TZ_SHIFT}') >= ?`); txBinds.push(from); }
-  if (to) { txWhere.push(`date(created_at, '${SHOP_TZ_SHIFT}') <= ?`); txBinds.push(to); }
+  // Include fixed context outside the visible window, so a date's filtering
+  // does not change when switching between 7/30/90-day chart ranges.
+  if (from) { txWhere.push(`date(created_at, '${SHOP_TZ_SHIFT}') >= date(?, '-7 days')`); txBinds.push(from); }
+  if (to) { txWhere.push(`date(created_at, '${SHOP_TZ_SHIFT}') <= date(?, '+7 days')`); txBinds.push(to); }
   const tx = await c.env.DB.prepare(
-    `SELECT date(created_at, '${SHOP_TZ_SHIFT}') AS day,
-            MIN(rate) AS our_min, MAX(rate) AS our_max,
-            AVG(rate) AS our_avg, COUNT(*) AS count
-     FROM transactions WHERE ${txWhere.join(' AND ')} GROUP BY day`
+    `SELECT date(created_at, '${SHOP_TZ_SHIFT}') AS day, rate
+     FROM transactions WHERE ${txWhere.join(' AND ')}`
   ).bind(...txBinds).all();
 
   const byDay = new Map();
   for (const r of sr.results) {
     byDay.set(r.day, {
       day: r.day, sr_buying: r.sr_buying, sr_selling: r.sr_selling,
-      our_min: null, our_max: null, our_avg: null, count: 0,
+      our_min: null, our_max: null, our_avg: null, count: 0, filtered_count: 0, kept_count: 0,
     });
   }
-  for (const r of tx.results) {
+  for (const r of summarizeRateHistory(tx.results)) {
+    if ((from && r.day < from) || (to && r.day > to)) continue;
     const e = byDay.get(r.day) || {
       day: r.day, sr_buying: null, sr_selling: null,
       our_min: null, our_max: null, our_avg: null, count: 0,
     };
     e.our_min = r.our_min; e.our_max = r.our_max; e.our_avg = r.our_avg; e.count = r.count;
+    e.filtered_count = r.filtered_count; e.kept_count = r.kept_count;
     byDay.set(r.day, e);
   }
   const merged = [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1));
